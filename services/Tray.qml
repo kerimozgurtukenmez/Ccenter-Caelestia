@@ -29,7 +29,8 @@ Singleton {
     Process {
         id: proc
         running: root.enabled
-        command: ["python3", Quickshell.shellPath("scripts/tray.py"), root.iconFile]
+        // Kullanıcı resmi yoksa uygulama ikonu (assets/ccenter.svg)
+        command: ["python3", Quickshell.shellPath("scripts/tray.py"), root.iconFile, Quickshell.shellPath("assets/ccenter.svg")]
         stdinEnabled: true
         onStarted: root.push()
         stdout: SplitParser {

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Ccenter
+GenericName=Fan Control
+Comment=Laptop fan and keyboard control center for Caelestia
+Comment[tr]=Caelestia için dizüstü fan ve klavye kontrol merkezi
+Exec=ccenter
+Icon=ccenter
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=fan;nbfc;cooling;temperature;keyboard;rgb;fan kontrol;sıcaklık;klavye;
+StartupWMClass=ccenter

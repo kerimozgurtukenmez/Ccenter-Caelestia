@@ -48,34 +48,60 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 - [nbfc-linux](https://github.com/nbfc-linux/nbfc-linux) with a working config for your laptop
 - A polkit agent (service and config actions use `pkexec`)
 - [Material Symbols Rounded](https://fonts.google.com/icons) font
+- `make` (for installing)
 - Optional: `python-gobject` (tray icon in the Caelestia bar), `nvidia-smi` (NVIDIA GPU temperature), `lspci` (GPU names)
 
 ## Installation
 
 ```sh
-git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git ~/.config/quickshell/Ccenter
-qs -c Ccenter -n -d
+git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git
+cd Ccenter-Caelestia
+sudo make install
 ```
 
-Always start it with `-n` (no duplicate): two running copies would fight over the fans.
+Then start **Ccenter** from your app launcher, or run `ccenter`.
+
+This installs:
+
+| What | Where |
+|---|---|
+| App files | `/usr/share/ccenter/` |
+| `ccenter` command | `/usr/bin/ccenter` |
+| Launcher entry and icon | `/usr/share/applications/ccenter.desktop`, `/usr/share/icons/hicolor/scalable/apps/ccenter.svg` |
+| Background service (off until you enable it) | `/usr/lib/systemd/user/ccenter.service` |
+
+Nothing is written to your home folder during installation. The app itself only writes its settings to `~/.config/ccenter/settings.json`, and only after you change something.
+
+The cloned folder is not needed after installation; you can delete it. To update later, pull or clone again and run `sudo make install`.
+
+### Uninstall
+
+```sh
+sudo make uninstall
+```
+
+Your settings in `~/.config/ccenter` are kept; delete that folder too if you want a clean slate. If you enabled the background service, run `systemctl --user disable ccenter.service` first.
 
 ### Running in the background
-- Closing the window does **not** quit Ccenter; it keeps controlling the fans in the background. Reopen it with `qs -c Ccenter ipc call cc open`.
-- To quit completely, use the "Quit" button in the app or `qs -c Ccenter ipc call cc quit`. Fans that Ccenter was controlling are handed back to NBFC's automatic control first.
-- "Start in background on login" in the app enables a systemd user service (`dist/ccenter.service`, linked into `~/.config/systemd/user`). Turning it off removes the link. When the service stops or crashes, fans are handed back to NBFC (`nbfc set -a`).
+- Closing the window does **not** quit Ccenter; it keeps controlling the fans in the background. Open it again from the launcher, the tray icon or with `ccenter`.
+- To quit completely, use the "Quit" button in the app, the tray menu or `ccenter quit`. Fans that Ccenter was controlling are handed back to NBFC's automatic control first.
+- "Start in background on login" in the app enables the systemd user service. When the service stops or crashes, fans are handed back to NBFC (`nbfc set -a`).
+- Only one copy of Ccenter runs at a time. `ccenter` refuses to start a second copy, because two copies would fight over the fans.
 
 ### Terminal control
 
 ```sh
-qs -c Ccenter ipc call cc status            # fans, temperatures, active profile
-qs -c Ccenter ipc call cc profiles          # list profiles (* = active)
-qs -c Ccenter ipc call cc profile Sessiz    # apply a profile (case-insensitive)
-qs -c Ccenter ipc call cc boost 15          # max fan for 15 minutes (0 = off, -- -1 = until turned off)
-qs -c Ccenter ipc call cc open              # open the window (also: hide, toggle)
-qs -c Ccenter ipc call cc quit              # quit; fans go back to NBFC auto
+ccenter                     # open the window (starts the app if needed)
+ccenter status              # fans, temperatures, active profile
+ccenter profiles            # list profiles (* = active)
+ccenter profile Sessiz      # apply a profile (case-insensitive)
+ccenter boost 15            # max fan for 15 minutes (0 = off, -1 = until turned off)
+ccenter hide                # also: open, toggle
+ccenter quit                # quit; fans go back to NBFC auto
+ccenter --help
 ```
 
-Handy for Hyprland keybinds, e.g. `bind = SUPER, F9, exec, qs -c Ccenter ipc call cc profile Performans`.
+Handy for Hyprland keybinds, e.g. `bind = SUPER, F9, exec, ccenter profile Performans`.
 
 The window uses the app ID `ccenter`, so you can target it in Hyprland rules with `class:^(ccenter)$`.
 
@@ -83,24 +109,40 @@ The window uses the app ID `ccenter`, so you can target it in Hyprland rules wit
 
 - Return fans to NBFC's automatic control: `nbfc set -a`
 - Ccenter never edits NBFC config files. It only changes which config is selected. To go back to a config of your choice: `sudo nbfc config --set "<config name>"` followed by `sudo nbfc restart`
+- Remove the app: `sudo make uninstall` (see above)
+
+## Development
+
+Run it straight from the cloned folder without installing:
+
+```sh
+./bin/ccenter
+```
+
+`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. Quickshell reloads the UI live when you save a file.
 
 ## Project layout
 
 ```
-shell.qml           window and tabs
-services/           backends (NBFC, sensors, colors)
-utils/              helpers
-components/         shared UI components
-modules/fan/        fan tab
+shell.qml           window, tabs, terminal commands (IPC), tray wiring
+services/           always-running backends: NBFC, fan state, settings, sensors, colors, notifications, tray
+modules/fan/        fan tab (UI only)
 modules/keyboard/   keyboard tab
-scripts/            sensor / hardware info scripts
-assets/             images
+components/         shared UI components
+utils/              helpers
+scripts/            sensor / hardware info scripts, tray icon helper
+assets/             icons and images
+bin/ccenter         launcher and terminal commands
+dist/               desktop entry and systemd user service
+Makefile            install / uninstall
 ```
 
 ## Status / roadmap
 
 - [x] Fan control through NBFC
-- [ ] Persist per-fan settings across restarts
+- [x] Persist per-fan settings across restarts
+- [x] Profiles, background mode, tray icon, notifications
+- [x] System-wide installation (`make install`)
 - [ ] Keyboard RGB backend
 - [ ] Sync keyboard colors with Caelestia
 - [ ] English UI

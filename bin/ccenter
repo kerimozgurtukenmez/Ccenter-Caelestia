@@ -1,0 +1,84 @@
+#!/bin/sh
+# Ccenter başlatıcısı ve terminal komutları.
+# Kurulu: /usr/share/ccenter; proje klasöründen çalıştırılırsa (bin/ccenter) proje klasörü kullanılır.
+# CCENTER_DIR ile başka bir klasör seçilebilir.
+
+set -u
+
+self=$(readlink -f "$0")
+if [ -n "${CCENTER_DIR:-}" ]; then
+    dir=$CCENTER_DIR
+elif [ -f "${self%/bin/ccenter}/shell.qml" ]; then
+    dir=${self%/bin/ccenter}                      # geliştirme kopyası
+else
+    dir=/usr/share/ccenter
+fi
+
+if [ ! -f "$dir/shell.qml" ]; then
+    echo "ccenter: uygulama dosyaları bulunamadı ($dir)" >&2
+    exit 1
+fi
+command -v qs >/dev/null 2>&1 || { echo "ccenter: quickshell (qs) kurulu değil" >&2; exit 1; }
+
+usage() {
+    cat <<EOF
+Kullanım: ccenter [komut]
+
+  (komutsuz)         Pencereyi aç; uygulama çalışmıyorsa başlat
+  --background       Pencere açmadan başlat (systemd servisi bunu kullanır)
+  open | hide | toggle
+  status             Fanlar, sıcaklıklar, aktif profil
+  profiles           Profilleri listele (* = aktif)
+  profile <ad>       Profil uygula (büyük/küçük harf fark etmez)
+  boost <dk>         Maksimum fan: dakika, 0 = kapat, -1 = süresiz
+  quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner)
+  --help | --version
+EOF
+}
+
+# Bu kopya çalışıyor mu?
+running() { qs ipc -p "$dir" show >/dev/null 2>&1; }
+
+# Başka bir Ccenter kopyası (geliştirme ya da kurulu) çalışıyor mu? İkisi aynı anda fanları sürmemeli.
+other_instance() {
+    qs list --all 2>/dev/null | awk -v me="$dir/shell.qml" '
+        /Config path:/ { p = $3; low = tolower(p)
+                         if (p != me && low ~ /ccenter\/shell\.qml$/) { print p; exit } }'
+}
+
+ipc() { qs ipc -p "$dir" call cc "$@"; }
+
+need_running() {
+    running || { echo "ccenter: uygulama çalışmıyor (başlatmak için: ccenter)" >&2; exit 1; }
+}
+
+# Başlatmadan önce: başka kopya varsa uyar ve çık
+guard() {
+    other=$(other_instance)
+    if [ -n "$other" ]; then
+        echo "ccenter: başka bir Ccenter kopyası çalışıyor: $other" >&2
+        echo "İki kopya aynı anda fanları kontrol etmesin diye başlatılmadı. Önce onu kapat." >&2
+        exit 1
+    fi
+}
+
+case "${1:-}" in
+    "")
+        if running; then ipc open; else guard; qs -p "$dir" -n -d >/dev/null 2>&1; fi ;;
+    --background)
+        guard; exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n ;;
+    open|hide|toggle|status|profiles|quit)
+        need_running; ipc "$1" ;;
+    profile)
+        [ $# -ge 2 ] || { echo "Kullanım: ccenter profile <ad>" >&2; exit 2; }
+        need_running; shift; ipc profile "$*" ;;
+    boost)
+        [ $# -ge 2 ] || { echo "Kullanım: ccenter boost <dakika>" >&2; exit 2; }
+        need_running; ipc boost -- "$2" ;;
+    -h|--help|help)
+        usage ;;
+    -V|--version)
+        v=$(cat "$dir/VERSION" 2>/dev/null || echo "?"); echo "ccenter $v ($dir)" ;;
+    *)
+        echo "ccenter: bilinmeyen komut: $1" >&2; usage >&2; exit 2 ;;
+esac

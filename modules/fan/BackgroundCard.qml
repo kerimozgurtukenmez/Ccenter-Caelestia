@@ -10,10 +10,12 @@ Card {
     ToggleRow {
         icon: "login"
         label: "Oturum açılınca arka planda başlat"
-        sub: "Pencere açılmadan başlar, fan ayarların hemen uygulanır"
+        sub: Autostart.installed ? "Pencere açılmadan başlar, fan ayarların hemen uygulanır"
+                                 : "Önce kurulum gerekli: sudo make install"
         controlled: true
         checked: Autostart.enabled
-        enabled: !Autostart.busy
+        enabled: Autostart.installed && !Autostart.busy
+        opacity: enabled ? 1 : 0.5
         onToggled: v => Autostart.setEnabled(v)
     }
     ToggleRow {
@@ -27,7 +29,7 @@ Card {
     StyledText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: "Pencereyi kapatınca uygulama arka planda çalışmaya devam eder. Tekrar açmak için uygulamayı yeniden başlat ya da: qs -c Ccenter ipc call cc open"
+        text: "Pencereyi kapatınca uygulama arka planda çalışmaya devam eder. Tekrar açmak için uygulama menüsünden ya da terminalden: ccenter"
         color: Colours.fgDim
         font.pixelSize: 11
     }
