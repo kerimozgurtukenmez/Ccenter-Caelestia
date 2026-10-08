@@ -2,30 +2,30 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// Fan ayarlarının tek kaynağı (arayüzden bağımsız, her zaman çalışır).
-// Arayüz (FanCard/ProfileCard) sadece bunu gösterir ve buraya değişiklik bildirir; pencere kapalıyken
-// arayüz bellekten silinse de fan kontrolü, profiller, terminal (IPC) ve tepsi buradan çalışır.
-// st = { mode: 0 oto | 1 sabit | 2 eğri, fixed: 0..1, curve: [{t,s}], smooth, src: cpu|gpu|max, hyst }
+// Single source of truth for fan settings (independent of the UI, always running).
+// The UI (FanCard/ProfileCard) only displays this and reports changes here. When the window is closed and the
+// UI is destroyed, fan control, profiles, terminal commands (IPC) and the tray keep working from here.
+// st = { mode: 0 auto | 1 fixed | 2 curve, fixed: 0..1, curve: [{t,s}], smooth, src: cpu|gpu|max, hyst }
 Singleton {
     id: root
 
     readonly property var defaultCurve: [{ t: 45, s: 20 }, { t: 55, s: 40 }, { t: 65, s: 60 }, { t: 75, s: 80 }, { t: 85, s: 100 }]
     readonly property var autoSt: ({ mode: 0, fixed: 0.5, curve: defaultCurve, smooth: true, src: "cpu", hyst: 3 })
-    // Eksik alanları varsayılanla tamamlar (kayıttan/profilden gelen st'ler)
+    // Fills missing fields with defaults (for st objects coming from the settings file or a profile)
     function full(s) {
         const o = Object.assign({}, autoSt, s || {})
         if (!o.curve || o.curve.length < 2) o.curve = defaultCurve
         return o
     }
 
-    property var fanSt: []                   // fan sırasıyla st
+    property var fanSt: []                   // st per fan, in fan order
     property var globalSt: autoSt
     property bool globalOn: false
     property bool restored: false
-    property bool applying: false            // kayıttan/profilden yüklerken "elle değişti" sayılmasın
+    property bool applying: false            // while loading from settings/a profile, don't count changes as manual edits
 
-    // ---------- açılış: kayıtlı ayarları geri yükle ----------
-    // Kaydı olmayan fanlara komut gönderilmez; NBFC'deki mevcut durumları gösterilir.
+    // ---------- startup: restore saved settings ----------
+    // Fans without saved settings get no commands; they just show their current NBFC state.
     function restore() {
         if (Nbfc.fans.length === 0) return
         if (restored && fanSt.length === Nbfc.fans.length) return
@@ -54,7 +54,7 @@ Singleton {
         function onFansChanged() { Qt.callLater(root.restore) }
     }
 
-    // ---------- arayüzden gelen değişiklikler ----------
+    // ---------- changes coming from the UI ----------
     function setFan(i, st) {
         const a = fanSt.slice()
         a[i] = full(st)
@@ -69,7 +69,7 @@ Singleton {
         Settings.setGlobal(Nbfc.configId, globalOn, globalSt)
         manualEdit()
     }
-    // Global açılınca global ayar tüm fanlara yazılır; kapanınca her fan kendi ayarına döner
+    // Global on: the global setting is written to every fan; global off: each fan goes back to its own setting
     function setGlobalOn(on) {
         if (globalOn === on) return
         globalOn = on
@@ -83,19 +83,33 @@ Singleton {
     }
     function manualEdit() { if (!applying) Settings.setActive(Nbfc.configId, "") }
 
-    // ---------- profiller ----------
+    // ---------- profiles ----------
     function curveSt(pts, hyst) { return { mode: 2, fixed: 0.5, curve: pts, smooth: true, src: "max", hyst: hyst } }
-    // Hazır profiller: tüm fanlara Global üzerinden aynı eğri, CPU ve GPU'dan sıcak olana bakar
+    // Built-in profiles: the same curve on all fans via Global, following the hotter of CPU and GPU.
+    // `name` is a language-independent id (saved in settings as the active profile); `label` is translated for display.
     readonly property var builtins: [
-        { name: "NBFC Otomatik", icon: "auto_mode", fans: {}, global: null },
-        { name: "Sessiz", icon: "volume_off",
+        { name: "auto", label: "NBFC Auto", builtin: true, icon: "auto_mode", fans: {}, global: null },
+        { name: "quiet", label: "Quiet", builtin: true, icon: "volume_off",
           global: { on: true, st: curveSt([{ t: 45, s: 0 }, { t: 55, s: 25 }, { t: 65, s: 40 }, { t: 75, s: 60 }, { t: 85, s: 100 }], 4) } },
-        { name: "Dengeli", icon: "balance",
+        { name: "balanced", label: "Balanced", builtin: true, icon: "balance",
           global: { on: true, st: curveSt([{ t: 45, s: 20 }, { t: 55, s: 35 }, { t: 65, s: 55 }, { t: 75, s: 75 }, { t: 85, s: 100 }], 3) } },
-        { name: "Performans", icon: "bolt",
+        { name: "performance", label: "Performance", builtin: true, icon: "bolt",
           global: { on: true, st: curveSt([{ t: 40, s: 40 }, { t: 50, s: 55 }, { t: 60, s: 70 }, { t: 70, s: 85 }, { t: 80, s: 100 }], 2) } }
     ]
     function allProfiles() { return builtins.concat(Settings.profilesOf(Nbfc.configId)) }
+    // Name shown in the UI: built-ins are translated, user profiles keep their own name
+    function displayName(p) { return p.builtin ? I18n.t(p.label) : p.name }
+    // Older versions saved the built-in profiles by their Turkish names
+    readonly property var legacyIds: ({ "NBFC Otomatik": "auto", "Sessiz": "quiet", "Dengeli": "balanced", "Performans": "performance" })
+    function activeId() { const a = Settings.activeOf(Nbfc.configId); return legacyIds[a] ?? a }
+    function activeName() { const p = allProfiles().find(x => x.name === activeId()); return p ? displayName(p) : "" }
+    // Every name a profile answers to: id, English label and its translations (case-insensitive)
+    function namesOf(p) {
+        if (!p.builtin) return [p.name.toLocaleLowerCase()]
+        return [p.name, p.label].concat(I18n.languages.map(l => I18n.tIn(l.id, p.label))).map(x => x.toLocaleLowerCase())
+    }
+    // A user profile may not take a name a built-in profile answers to
+    function reservedName(n) { const k = String(n).trim().toLocaleLowerCase(); return builtins.some(p => namesOf(p).indexOf(k) >= 0) }
 
     function snapshot(name) {
         const fans = {}
@@ -121,38 +135,37 @@ Singleton {
         Settings.setActive(id, p.name)
         applying = false
     }
-    // Arayüz, terminal ve tepsi profili adıyla uygular (Qt liste tiplerine takılmamak için asıl listeden alınır)
+    // UI, terminal and tray apply profiles by name (taken from the real list, so Qt list types can't get in the way)
     function applyByName(name, fromIpc) {
         const key = String(name).trim().toLocaleLowerCase()
-        const p = allProfiles().find(x => x.name.toLocaleLowerCase() === key)
-        if (!p) return "Profil bulunamadı: " + name + "\n" + profileList()
-        if (!restored) return "Fanlar henüz okunmadı (NBFC çalışıyor mu?), tekrar dene"
-        if (!Nbfc.running) return "NBFC servisi çalışmıyor"
-        if (Nbfc.readOnly) return "NBFC salt-okunur modda, fan hızı yazılamaz"
+        const p = allProfiles().find(x => namesOf(x).indexOf(key) >= 0)
+        if (!p) return I18n.t("Profile not found: %1").arg(name) + "\n" + profileList()
+        if (!restored) return I18n.t("Fans not read yet (is NBFC running?), try again")
+        if (!Nbfc.running) return I18n.t("The NBFC service is not running")
+        if (Nbfc.readOnly) return I18n.t("NBFC is in read-only mode, fan speeds can't be written")
         applyProfile(p)
-        if (fromIpc && Notify.profiles) Notify.send("Fan profili: " + p.name, "", "low", "dialog-information")
-        return "Uygulandı: " + p.name
+        if (fromIpc && Notify.profiles) Notify.send(I18n.t("Fan profile: %1").arg(displayName(p)), "", "low", "dialog-information")
+        return I18n.t("Applied: %1").arg(displayName(p))
     }
     function profileList() {
-        const active = Settings.activeOf(Nbfc.configId)
-        return allProfiles().map(p => (p.name === active ? "* " : "  ") + p.name).join("\n")
+        const active = activeId()
+        return allProfiles().map(p => (p.name === active ? "* " : "  ") + displayName(p) + (p.builtin ? "  (" + p.name + ")" : "")).join("\n")
     }
     function statusText() {
-        const modes = ["Otomatik", "Sabit", "Eğri"]
-        const active = Settings.activeOf(Nbfc.configId)
+        const modes = [I18n.t("Auto"), I18n.t("Fixed"), I18n.t("Curve")]
         const lines = [
-            "Servis: " + (Nbfc.running ? "çalışıyor" : "durdu") + (Nbfc.readOnly ? " (salt-okunur)" : ""),
+            I18n.t("Service: %1").arg(Nbfc.running ? I18n.t("running") : I18n.t("stopped")) + (Nbfc.readOnly ? " (" + I18n.t("read-only") + ")" : ""),
             "Config: " + (Nbfc.configId || "-"),
-            "Profil: " + (active || "özel ayarlar"),
+            I18n.t("Profile: %1").arg(activeName() || I18n.t("custom settings")),
             "CPU: " + (isFinite(Nbfc.temp) ? Nbfc.temp.toFixed(1) + "°C" : "-") + "   GPU: " + (isFinite(Sensors.gpu) ? Sensors.gpu.toFixed(0) + "°C" : "-"),
-            "Global: " + (globalOn ? "açık (" + modes[globalSt.mode] + ")" : "kapalı")
-                + (Nbfc.boosting ? "   Maksimum fan: açık" : "")
+            "Global: " + (globalOn ? I18n.t("on (%1)").arg(modes[globalSt.mode]) : I18n.t("off"))
+                + (Nbfc.boosting ? "   " + I18n.t("Max fan: on") : "")
         ]
         for (let i = 0; i < Nbfc.fans.length; i++) {
             const f = Nbfc.fans[i]
             const m = globalOn ? globalSt.mode : (fanSt[i] ? fanSt[i].mode : 0)
-            lines.push("Fan " + (i + 1) + " (" + f.name + "): " + modes[m] + " · NBFC " + (f.auto ? "oto" : "elle")
-                       + " · anlık %" + Math.round(f.current) + " · hedef %" + Math.round(f.target))
+            lines.push(I18n.t("Fan %1 (%2): %3 · NBFC %4 · current %5% · target %6%").arg(i + 1).arg(f.name).arg(modes[m])
+                       .arg(f.auto ? I18n.t("auto") : I18n.t("manual")).arg(Math.round(f.current)).arg(Math.round(f.target)))
         }
         return lines.join("\n")
     }

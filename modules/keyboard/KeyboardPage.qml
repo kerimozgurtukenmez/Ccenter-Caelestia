@@ -3,8 +3,8 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Klavye ışığı (tek bölge). Mantık services/Keyboard.qml'de; burası sadece görünüm.
-// Düzen: solda seçili efektin ayarları, sağda efekt listesi, altta genel parlaklık.
+// Keyboard light (single zone). Logic lives in services/Keyboard.qml; this is only the view.
+// Layout: settings of the selected effect on the left, effect list on the right, overall brightness below.
 Flickable {
     id: page
     clip: true
@@ -14,26 +14,26 @@ Flickable {
 
     readonly property bool canWrite: Keyboard.available && Keyboard.writable
     readonly property bool breathing: Keyboard.effect === "breathing"
-    readonly property bool animated: Keyboard.effect !== "static"     // nefes ya da renk geçişi
-    // Renk kaynağı seçenekleri: renk geçişinde "seçilen renk" yok (tek renkle geçiş olmaz)
-    readonly property var sources: breathing ? [{ id: "single", t: "Seçilen renk" }, { id: "multi", t: "Birden fazla" }, { id: "theme", t: "Caelestia" }]
-                                             : [{ id: "multi", t: "Birden fazla" }, { id: "theme", t: "Caelestia" }]
-    // Efekt listesi (yeni efektler buraya eklenir)
+    readonly property bool animated: Keyboard.effect !== "static"     // breathing or colour cycle
+    // Colour source options: no "chosen colour" for the colour cycle (a cycle needs more than one colour)
+    readonly property var sources: breathing ? [{ id: "single", t: I18n.t("Chosen color") }, { id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
+                                             : [{ id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
+    // Effect list (new effects are added here)
     readonly property var effects: [
-        { id: "static", name: "Sabit", icon: "lightbulb", sub: "Tek renk, sürekli yanar" },
-        { id: "breathing", name: "Nefes", icon: "airwave", sub: "Yavaşça yanıp söner" },
-        { id: "cycle", name: "Renk geçişi", icon: "gradient", sub: "Renkler arasında akar" }
+        { id: "static", name: I18n.t("Static"), icon: "lightbulb", sub: I18n.t("One color, always on") },
+        { id: "breathing", name: I18n.t("Breathing"), icon: "airwave", sub: I18n.t("Slowly fades in and out") },
+        { id: "cycle", name: I18n.t("Color cycle"), icon: "gradient", sub: I18n.t("Flows between colors") }
     ]
     readonly property var current: effects.find(e => e.id === Keyboard.effect) ?? effects[0]
-    // Hazır renkler; ilki Caelestia temasının ana rengi
+    // Preset colours; the first is the Caelestia theme's primary colour (names are not shown, no translation needed)
     readonly property var presets: [
         { name: "Caelestia", c: Colours.primary },
-        { name: "Beyaz", c: "#ffffff" }, { name: "Kırmızı", c: "#ff0000" }, { name: "Turuncu", c: "#ff6000" },
-        { name: "Sarı", c: "#ffd000" }, { name: "Yeşil", c: "#00ff00" }, { name: "Camgöbeği", c: "#00ffff" },
-        { name: "Mavi", c: "#0040ff" }, { name: "Mor", c: "#8000ff" }, { name: "Pembe", c: "#ff00a0" }
+        { name: "White", c: "#ffffff" }, { name: "Red", c: "#ff0000" }, { name: "Orange", c: "#ff6000" },
+        { name: "Yellow", c: "#ffd000" }, { name: "Green", c: "#00ff00" }, { name: "Cyan", c: "#00ffff" },
+        { name: "Blue", c: "#0040ff" }, { name: "Purple", c: "#8000ff" }, { name: "Pink", c: "#ff00a0" }
     ]
 
-    // Nefeste "birden fazla renk" seçiliyken renk çemberi listedeki seçili rengi düzenler
+    // With "several colours" selected, the colour wheel edits the selected colour of the list
     property int editIndex: 0
     readonly property bool editingList: animated && Keyboard.source === "multi"
     readonly property bool themeLocked: animated && Keyboard.source === "theme"
@@ -45,9 +45,9 @@ Flickable {
         a[editAt] = Keyboard.hex(Qt.lighter(c, 1))
         Keyboard.setColors(a)
     }
-    function pct(v) { return "%" + Math.round(v * 100) }
+    function pct(v) { return I18n.t("%1%").arg(Math.round(v * 100)) }
 
-    // Pencere açılınca güncel durumu oku (Fn tuşlarıyla değişmiş olabilir)
+    // Read the current state when the window opens (may have changed via Fn keys)
     Component.onCompleted: Keyboard.refresh()
 
     ColumnLayout {
@@ -55,9 +55,9 @@ Flickable {
         width: page.width
         spacing: 12
 
-        // ---------- durum ----------
+        // ---------- status ----------
         Card {
-            title: "Klavye ışığı"
+            title: I18n.t("Keyboard light")
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
@@ -78,22 +78,22 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 2
                     StyledText {
-                        text: !Keyboard.ready ? "Okunuyor…" : Keyboard.available ? Keyboard.name : "Klavye ışığı bulunamadı"
+                        text: !Keyboard.ready ? I18n.t("Reading…") : Keyboard.available ? Keyboard.name : I18n.t("No keyboard light found")
                         color: Colours.fg
                         font { pixelSize: 15; bold: true }
                     }
                     StyledText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: !Keyboard.available ? "Bu bilgisayarda çekirdeğin tanıdığı bir klavye ışığı yok."
-                            : (Keyboard.rgb ? "RGB · tek bölge (tüm klavye tek renk)" : "Tek renk · sadece parlaklık")
-                              + (Keyboard.rgb ? " · efekt: " + page.current.name : "")
+                        text: !Keyboard.available ? I18n.t("This computer has no keyboard light the kernel recognizes.")
+                            : (Keyboard.rgb ? I18n.t("RGB · single zone (the whole keyboard is one color)") : I18n.t("Single color · brightness only"))
+                              + (Keyboard.rgb ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
                         color: Colours.fgDim
                         font.pixelSize: 11
                     }
                 }
             }
-            // İzin yok: ne yapılacağını anlat, kullanıcı isterse ver
+            // No permission: explain what will be done, grant if the user wants
             ColumnLayout {
                 visible: Keyboard.available && !Keyboard.writable && Keyboard.ready
                 Layout.fillWidth: true
@@ -101,28 +101,28 @@ Flickable {
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Klavye ışığını değiştirmek için izin gerekiyor."
+                    text: I18n.t("Permission is needed to change the keyboard light.")
                     color: Colours.warning
                     font { pixelSize: 13; bold: true }
                 }
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Ne yapılır: /etc/udev/rules.d/90-ccenter.rules eklenir; " + Keyboard.name + " ışığının yalnızca renk ve parlaklık dosyaları yazılabilir olur (bugün 'sudo tee' ile yaptığın şey).\n"
-                        + "Ne değişir: bu bilgisayardaki programlar klavye ışığının rengini ve parlaklığını değiştirebilir; fanlara, dosyalara ya da sisteme erişim vermez.\n"
-                        + "Geri alma: buradan 'İzni kaldır'. Şifren sistemin kendi penceresinde sorulur, Ccenter görmez."
+                    text: I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name) + "\n"
+                        + I18n.t("What changes: programs on this computer can change the keyboard light's color and brightness; it gives no access to the fans, files or the system.") + "\n"
+                        + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Ccenter never sees it.")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
                 Btn {
                     icon: "key"
-                    text: Keyboard.permBusy ? "Şifre bekleniyor…" : "İzin ver"
+                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Grant permission")
                     filled: true
                     enabled: !Keyboard.permBusy
                     onClicked: Keyboard.grantPermission()
                 }
             }
-            // İzin uygulamanın eklediği kuraldan geliyorsa geri alınabilir
+            // If the permission comes from the rule the app added, it can be removed here
             RowLayout {
                 visible: Keyboard.writable && Keyboard.ruleAt === "etc"
                 Layout.fillWidth: true
@@ -130,13 +130,13 @@ Flickable {
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Klavye ışığı izni açık (/etc/udev/rules.d/90-ccenter.rules)."
+                    text: I18n.t("Keyboard light permission is on (/etc/udev/rules.d/90-ccenter.rules).")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
                 Btn {
                     icon: "key_off"
-                    text: Keyboard.permBusy ? "Şifre bekleniyor…" : "İzni kaldır"
+                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Remove permission")
                     enabled: !Keyboard.permBusy
                     onClicked: Keyboard.revokePermission()
                 }
@@ -151,7 +151,7 @@ Flickable {
             }
         }
 
-        // ---------- efekt: solda ayarlar, sağda liste ----------
+        // ---------- effect: settings on the left, list on the right ----------
         RowLayout {
             visible: Keyboard.rgb
             Layout.fillWidth: true
@@ -159,18 +159,18 @@ Flickable {
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4
 
-            // Seçili efektin ayarları
+            // Settings of the selected effect
             Card {
                 Layout.alignment: Qt.AlignTop
-                title: "Ayarlar · " + page.current.name
+                title: I18n.t("Settings · %1").arg(page.current.name)
 
-                // Nefes / renk geçişi ayarları
+                // Breathing / colour cycle settings
                 ColumnLayout {
                     visible: page.animated
                     Layout.fillWidth: true
                     spacing: 10
 
-                    StyledText { text: "Renkler"; color: Colours.fg; font.pixelSize: 13 }
+                    StyledText { text: I18n.t("Colors"); color: Colours.fg; font.pixelSize: 13 }
                     Segment {
                         model: page.sources.map(x => x.t)
                         controlled: true
@@ -178,7 +178,7 @@ Flickable {
                         onPicked: i => Keyboard.setSource(page.sources[i].id)
                     }
 
-                    // Renk listesi (birden fazla) ya da tema renkleri; o an nefes alan renk halkalı
+                    // Colour list (several colours) or theme colours; the one currently shown has a ring
                     RowLayout {
                         visible: Keyboard.source !== "single"
                         Layout.fillWidth: true
@@ -201,9 +201,9 @@ Flickable {
                                 }
                             }
                         }
-                        // Birden fazla: renk ekle/sil (en fazla 6). Caelestia: renk sayısı 3-6
+                        // Several colours: add/remove a colour (max 6). Caelestia: number of colours 3-6
                         StepBtn {
-                            // Caelestia: temada eklenecek farklı renk kalmadıysa (vurgu renkleri yoksa) gösterme
+                            // Caelestia: hide when the theme has no further distinct colour to add (no accent colours)
                             visible: page.editingList ? Keyboard.colors.length < 6
                                    : (page.themeLocked && Keyboard.themeCount < 6 && Keyboard.themeColors.length >= Keyboard.themeCount)
                             icon: "add"
@@ -232,39 +232,39 @@ Flickable {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: Keyboard.source === "theme"
-                            ? "Caelestia temanın renkleri (ana renk + temanın diğer renklerinden tonu en farklı olanlar; LED'de canlı görünsün diye doygunlukları artırıldı). + / − renk sayısını değiştirir (3-6). Tema değişince kendiliğinden güncellenir."
+                            ? I18n.t("Your Caelestia theme's colors (the primary color + the theme colors whose hue differs most; saturation is raised so they look vivid on the LEDs). + / − changes the number of colors (3-6). Updates by itself when the theme changes.")
                             : Keyboard.source === "multi"
-                            ? (page.breathing ? "Her nefeste sıradaki renk; renk ışık en karanlıktayken değişir." : "Renkler sırayla, yanıp sönmeden birbirine akar.")
-                              + " Bir renge tıkla, aşağıdaki çemberle değiştir. + ekler, − seçileni siler (en fazla 6)."
-                            : "Seçtiğin renk yanıp söner. Rengi aşağıdaki çemberden seç."
+                            ? (page.breathing ? I18n.t("Each breath uses the next color; the color changes when the light is darkest.") : I18n.t("The colors flow into each other in turn, without blinking."))
+                              + " " + I18n.t("Click a color and change it with the wheel below. + adds one, − removes the selected one (max 6).")
+                            : I18n.t("Your chosen color fades in and out. Pick the color from the wheel below.")
                         color: Colours.fgDim
                         font.pixelSize: 11
                     }
 
                     SliderRow {
                         id: speedRow
-                        label: "Hız"
+                        label: I18n.t("Speed")
                         value: Keyboard.speed
-                        readout: (page.breathing ? "bir nefes " : "renk başına ") + Keyboard.period.toFixed(1).replace(".", ",") + " sn"
+                        readout: I18n.t(page.breathing ? "%1 s per breath" : "%1 s per color").arg(I18n.num(Keyboard.period, 1))
                         onMoved: v => Keyboard.setSpeed(v)
                     }
                     SliderRow {
                         id: lowRow
                         visible: page.breathing
-                        label: "En düşük"
+                        label: I18n.t("Lowest")
                         value: Keyboard.minLevel
-                        readout: Keyboard.minLevel === 0 ? "tamamen söner" : page.pct(Keyboard.minLevel)
+                        readout: Keyboard.minLevel === 0 ? I18n.t("fully off") : page.pct(Keyboard.minLevel)
                         onMoved: v => Keyboard.setRange(v, Keyboard.maxLevel)
                     }
                     SliderRow {
                         id: highRow
                         visible: page.breathing
-                        label: "En yüksek"
+                        label: I18n.t("Highest")
                         value: Keyboard.maxLevel
                         readout: page.pct(Keyboard.maxLevel)
                         onMoved: v => Keyboard.setRange(Keyboard.minLevel, v)
                     }
-                    // Kaydırıcılar sürüklenince bağı kopar; değer başka yerden değişince (diğer kaydırıcı itince, terminal) eşitle
+                    // Sliders lose their binding once dragged; resync when the value changes elsewhere (the other slider pushed it, terminal)
                     Connections {
                         target: Keyboard
                         function onMinLevelChanged() { lowRow.value = Keyboard.minLevel }
@@ -275,7 +275,7 @@ Flickable {
                         visible: page.breathing
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Seviyeler, alttaki genel parlaklığa göredir. En düşük %0 değilse ışık hiç sönmez."
+                        text: I18n.t("Levels are relative to the overall brightness below. Unless the lowest is 0%, the light never goes fully off.")
                         color: Colours.fgDim
                         font.pixelSize: 11
                     }
@@ -283,20 +283,20 @@ Flickable {
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Colours.outline; opacity: 0.5 }
                 }
 
-                // Sabit efektinde açıklama
+                // Description for the static effect
                 StyledText {
                     visible: !page.animated
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Klavye seçtiğin renkte sabit yanar."
+                    text: I18n.t("The keyboard stays lit in your chosen color.")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
 
-                // Renk seçimi (her iki efektte; Caelestia kaynağında kilitli)
+                // Colour picking (all effects; locked when the source is Caelestia)
                 StyledText {
-                    text: page.themeLocked ? "Renkler Caelestia temasından geliyor"
-                        : page.editingList ? "Renk · " + (page.editAt + 1) + ". renk" : "Renk"
+                    text: page.themeLocked ? I18n.t("The colors come from the Caelestia theme")
+                        : page.editingList ? I18n.t("Color · color %1").arg(page.editAt + 1) : I18n.t("Color")
                     color: Colours.fg
                     font.pixelSize: 13
                 }
@@ -340,12 +340,12 @@ Flickable {
                 }
             }
 
-            // Efekt listesi: tıklanan efekt etkinleşir
+            // Effect list: clicking an effect activates it
             Card {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: false
                 Layout.preferredWidth: 210
-                title: "Efektler"
+                title: I18n.t("Effects")
                 gap: 6
 
                 Repeater {
@@ -397,21 +397,21 @@ Flickable {
             }
         }
 
-        // ---------- genel parlaklık ----------
+        // ---------- overall brightness ----------
         Card {
             visible: Keyboard.available
-            title: "Parlaklık"
+            title: I18n.t("Brightness")
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4
 
             SliderRow {
                 id: bright
-                label: "Parlaklık"
+                label: I18n.t("Brightness")
                 value: Keyboard.maxBrightness > 0 ? Keyboard.brightness / Keyboard.maxBrightness : 0
-                readout: Math.round(value * 100) + "%"
+                readout: page.pct(value)
                 onMoved: v => Keyboard.setBrightness(v * Keyboard.maxBrightness)
             }
-            // Kaydırıcı sürüklenince bağı kopar; parlaklık başka yerden (butonlar, terminal) değişince eşitle
+            // The slider loses its binding once dragged; resync when brightness changes elsewhere (buttons, terminal)
             Connections {
                 target: Keyboard
                 function onBrightnessChanged() {
@@ -422,7 +422,7 @@ Flickable {
                 Layout.fillWidth: true
                 spacing: 8
                 Repeater {
-                    model: [{ t: "Kapalı", v: 0 }, { t: "%25", v: 0.25 }, { t: "%50", v: 0.5 }, { t: "%100", v: 1 }]
+                    model: [{ t: I18n.t("Off"), v: 0 }, { t: page.pct(0.25), v: 0.25 }, { t: page.pct(0.5), v: 0.5 }, { t: page.pct(1), v: 1 }]
                     Btn {
                         required property var modelData
                         Layout.fillWidth: true

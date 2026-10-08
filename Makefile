@@ -1,9 +1,9 @@
-# Sistem genelinde kurulum ve paketleme içindir. Normal kullanıcı için önerilen yol: ./install.sh
-# (kullanıcı klasörüne kurar, yönetici şifresi gerektirmez, klavye iznini sorar).
-#   sudo make install      /usr altına kurar (klavye izni EKLEMEZ)
-#   sudo make uninstall    kaldırır (kullanıcı ayarları ~/.config/ccenter'a dokunmaz)
-#   sudo make udev         klavye ışığı izni (udev kuralı) — isteğe bağlı, ayrıca çalıştırılır
-# Paketleme için: make DESTDIR=/paket/kökü PREFIX=/usr install
+# For system-wide installs and packaging. For a normal user the recommended way is ./install.sh
+# (installs into the home folder, needs no admin password, asks about the keyboard permission).
+#   sudo make install      installs under /usr (does NOT add the keyboard permission)
+#   sudo make uninstall    removes it (does not touch user settings in ~/.config/ccenter)
+#   sudo make udev         keyboard light permission (udev rule), optional and run separately
+# Packaging: make DESTDIR=/package/root PREFIX=/usr install
 
 PREFIX  ?= /usr
 DESTDIR ?=
@@ -14,10 +14,11 @@ APPSDIR = $(DESTDIR)$(PREFIX)/share/applications
 ICONDIR = $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 UNITDIR = $(DESTDIR)$(PREFIX)/lib/systemd/user
 UDEVDIR = $(DESTDIR)$(PREFIX)/lib/udev/rules.d
-# Klavye ışığı dosyaları (kaldırınca izinleri 0644'e döndürmek için)
+LICDIR  = $(DESTDIR)$(PREFIX)/share/licenses/ccenter
+# Keyboard light files (to restore their permissions to 0644 on uninstall)
 KBD_FILES = /sys/class/leds/*::kbd_backlight/brightness /sys/class/leds/*::kbd_backlight/multi_intensity
 
-# Uygulamanın çalışması için gereken dosyalar (CLAUDE.md, README, dist vb. kurulmaz)
+# Files the app needs at runtime (README, dist etc. are not installed; the license goes to share/licenses)
 APP_FILES = shell.qml VERSION
 APP_DIRS  = components modules services utils scripts assets
 
@@ -38,18 +39,20 @@ install:
 	install -Dm 644 assets/ccenter.svg $(ICONDIR)/ccenter.svg
 	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/ccenter.service > $(UNITDIR)/ccenter.service
 	chmod 644 $(UNITDIR)/ccenter.service
+	install -Dm 644 LICENSE $(LICDIR)/LICENSE
 	@echo
-	@echo "Ccenter kuruldu. Başlatmak için: ccenter   (ya da uygulama menüsünden)"
-	@echo "Klavye ışığı izni eklenmedi. İstersen: sudo make udev   (ya da uygulamadaki 'İzin ver')"
+	@echo "Ccenter installed. To start it: ccenter   (or from the app menu)"
+	@echo "The keyboard light permission was not added. If you want it: sudo make udev   (or 'Grant permission' in the app)"
 
 uninstall: uninstall-udev
 	rm -rf $(APPDIR)
 	rm -f $(BINDIR)/ccenter $(APPSDIR)/ccenter.desktop $(ICONDIR)/ccenter.svg $(UNITDIR)/ccenter.service
+	rm -rf $(LICDIR)
 	@echo
-	@echo "Ccenter kaldırıldı. Ayarların duruyor: ~/.config/ccenter (silmek istersen elle sil)."
-	@echo "Arka plan servisini etkinleştirdiysen: systemctl --user disable ccenter.service"
+	@echo "Ccenter removed. Your settings are kept in ~/.config/ccenter (delete it by hand if you want)."
+	@echo "If you enabled the background service: systemctl --user disable ccenter.service"
 
-# Klavye ışığı izni: kuralı kur ve hemen uygula (DESTDIR ile paketlerken sadece kopyalanır)
+# Keyboard light permission: install the rule and apply it right away (only copied when packaging with DESTDIR)
 udev:
 	install -Dm 644 dist/90-ccenter.rules $(UDEVDIR)/90-ccenter.rules
 	@if [ -z "$(DESTDIR)" ] && command -v udevadm >/dev/null; then \

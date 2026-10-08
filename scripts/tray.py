@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# Ccenter sistem tepsisi ikonu (StatusNotifierItem + com.canonical.dbusmenu).
-# Quickshell tepsi ikonlarını gösterebilir ama kendisi ikon yayınlayamaz; bu küçük yardımcı onu yapar.
-# Uygulama (services/Tray.qml) bunu alt süreç olarak çalıştırır:
-#   stdin  <- JSON durum satırları: {"profiles": [...], "active": "...", "boost": bool, "visible": bool, "tooltip": "..."}
-#   stdout -> komut satırları: toggle | profile <ad> | boost <dk> | quit
-# stdin kapanınca (uygulama kapandı/çöktü) kendisi de kapanır.
-# Bağımlılık: PyGObject (Gio, GLib) ve isteğe bağlı GdkPixbuf (resim dosyasından ikon için).
+# Ccenter tray icon (StatusNotifierItem + com.canonical.dbusmenu).
+# Quickshell can show tray icons but can't publish one itself; this small helper does that.
+# The app (services/Tray.qml) runs it as a child process:
+#   stdin  <- JSON state lines: {"profiles": [...], "active": "...", "boost": bool, "visible": bool, "tooltip": "..."}
+#   stdout -> command lines: toggle | profile <name> | boost <min> | quit
+# When stdin closes (the app quit/crashed) it exits too.
+# Dependencies: PyGObject (Gio, GLib) and optionally GdkPixbuf (icon from an image file).
 import json
 import os
 import sys
 import warnings
 
-# PyGObject, register_object için "deprecated" uyarısı basıyor; işlevi etkilemiyor, log'u kirletmesin
+# PyGObject prints a "deprecated" warning for register_object; harmless, keep it out of the log
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import gi
@@ -19,7 +19,7 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
-# İkon: sırayla denenen resim dosyaları (ör. kullanıcı resmi, uygulama ikonu); hiçbiri olmazsa tema ikonu
+# Icon: image files tried in order (e.g. the app icon); if none loads, the theme icon
 ICON_FILES = sys.argv[1:]
 FALLBACK_ICON = "ccenter"
 
@@ -102,14 +102,17 @@ MENU_XML = """
 SNI_PATH = "/StatusNotifierItem"
 MENU_PATH = "/MenuBar"
 
-state = {"profiles": [], "active": "", "boost": False, "visible": True, "tooltip": "Ccenter"}
+# Menu texts come from the app in the UI language (see services/Tray.qml); these are the defaults until then
+state = {"profiles": [], "active": "", "boost": False, "visible": True, "tooltip": "Ccenter",
+         "labels": {"show": "Show window", "hide": "Hide window", "boost": "Max fan (15 min)",
+                    "boostOff": "Turn max fan off", "quit": "Quit"}}
 revision = 1
 conn = None
 items = {}  # id -> (props, action)
 
 
 def emit(line):
-    """Uygulamaya komut gönder."""
+    """Send a command to the app (one line on stdout)."""
     try:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
@@ -118,7 +121,7 @@ def emit(line):
 
 
 def load_pixmap(path):
-    """Resmi SNI'nin beklediği ARGB32 (big-endian) piksel dizisine çevirir; olmazsa boş liste."""
+    """Convert the image to the ARGB32 (big-endian) pixel array SNI expects; empty list if that fails."""
     if not path or not os.path.isfile(path):
         return []
     try:
@@ -152,7 +155,7 @@ def load_pixmap(path):
 
 
 PIXMAP = next((p for p in map(load_pixmap, ICON_FILES) if p), [])
-# Sabit özellikler bir kez hazırlanır: ikon verisini her istekte yeniden çevirmek pahalı (~20 KB, bayt bayt)
+# Static properties are built once: converting the icon data on every request is expensive (~20 KB, byte by byte)
 STATIC_PROPS = {
     "Category": GLib.Variant("s", "Hardware"),
     "Id": GLib.Variant("s", "ccenter"),
@@ -167,7 +170,7 @@ STATIC_PROPS = {
 
 
 def build_menu():
-    """Menü öğelerini durumdan yeniden kurar: id -> (özellikler, eylem)."""
+    """Rebuild the menu items from the state: id -> (properties, action)."""
     global items
     items = {}
     nid = [1]
@@ -179,7 +182,7 @@ def build_menu():
         return i
 
     order = [
-        add({"label": GLib.Variant("s", "Pencereyi gizle" if state["visible"] else "Pencereyi aç")}, "toggle"),
+        add({"label": GLib.Variant("s", state["labels"]["hide"] if state["visible"] else state["labels"]["show"])}, "toggle"),
         add({"type": GLib.Variant("s", "separator")}),
     ]
     for name in state["profiles"]:
@@ -190,11 +193,11 @@ def build_menu():
         }, "profile " + name))
     order.append(add({"type": GLib.Variant("s", "separator")}))
     if state["boost"]:
-        order.append(add({"label": GLib.Variant("s", "Maksimum fanı kapat")}, "boost 0"))
+        order.append(add({"label": GLib.Variant("s", state["labels"]["boostOff"])}, "boost 0"))
     else:
-        order.append(add({"label": GLib.Variant("s", "Maksimum fan (15 dk)")}, "boost 15"))
+        order.append(add({"label": GLib.Variant("s", state["labels"]["boost"])}, "boost 15"))
     order.append(add({"type": GLib.Variant("s", "separator")}))
-    order.append(add({"label": GLib.Variant("s", "Tamamen kapat")}, "quit"))
+    order.append(add({"label": GLib.Variant("s", state["labels"]["quit"])}, "quit"))
     return order
 
 
@@ -262,13 +265,13 @@ def menu_method(_c, _s, _p, _i, method, params, inv):
 
 
 def on_state(line):
-    """Uygulamadan gelen durum satırı: menüyü ve ipucunu günceller."""
+    """A state line from the app: update the menu and the tooltip."""
     global order, revision
     try:
         new = json.loads(line)
     except ValueError:
         return
-    menu_changed = any(new.get(k) != state.get(k) for k in ("profiles", "active", "boost", "visible"))
+    menu_changed = any(new.get(k) != state.get(k) for k in ("profiles", "active", "boost", "visible", "labels"))
     tip_changed = new.get("tooltip") != state.get("tooltip")
     state.update({k: v for k, v in new.items() if k in state})
     if menu_changed:
@@ -302,7 +305,7 @@ def register_watcher():
 
 
 def on_watcher_appeared(*_):
-    register_watcher()   # bar (Caelestia) yeniden başlarsa yeniden kaydol
+    register_watcher()   # re-register if the bar (Caelestia) restarts
 
 
 loop = GLib.MainLoop()
@@ -312,7 +315,7 @@ conn.register_object(SNI_PATH, Gio.DBusNodeInfo.new_for_xml(SNI_XML).interfaces[
                      sni_method, sni_get_property, None)
 conn.register_object(MENU_PATH, Gio.DBusNodeInfo.new_for_xml(MENU_XML).interfaces[0],
                      menu_method, menu_get_property, None)
-# Adı senkron al: tepsiye kaydolmadan önce ad bizim olmalı
+# Take the bus name synchronously: it must be ours before registering with the tray
 conn.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "RequestName",
                GLib.Variant("(su)", (bus_name, 0)), None, Gio.DBusCallFlags.NONE, -1, None)
 Gio.bus_watch_name_on_connection(conn, "org.kde.StatusNotifierWatcher", Gio.BusNameWatcherFlags.NONE,

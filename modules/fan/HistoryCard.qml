@@ -4,17 +4,17 @@ import QtQuick.Shapes
 import qs.components
 import qs.services
 
-// Son 10 dakika: CPU / GPU sıcaklığı (°C) ve ortalama fan hızı (%) aynı 0–100 ölçeğinde
+// Last 10 minutes: CPU / GPU temperature (°C) and average fan speed (%) on the same 0-100 scale
 Card {
     id: card
-    title: "Son 10 dakika"
+    title: I18n.t("Last 10 minutes")
 
-    // Pencere gizliyken veri kaydı sürer ama grafik hesaplanmaz
+    // While the window is hidden samples are still recorded but the graph isn't computed
     readonly property var h: Nbfc.uiVisible ? Nbfc.history : []
     readonly property double end: h.length ? h[h.length - 1].t : Date.now()
     function px(t) { return (t - (end - Nbfc.historyMs)) / Nbfc.historyMs * plot.width }
     function py(v) { return plot.height * (1 - Math.max(0, Math.min(100, v)) / 100) }
-    // NaN olan örneklerde çizgiyi böl (GPU uykudayken vb.)
+    // Break the line at NaN samples (e.g. GPU asleep)
     function lines(key) {
         const out = []
         let cur = []
@@ -43,7 +43,7 @@ Card {
                 Row {
                     spacing: 2
                     Repeater {
-                        model: modelData.key === "fan" ? 3 : 1    // fan çizgisi kesikli
+                        model: modelData.key === "fan" ? 3 : 1    // the fan line is dashed
                         Rectangle { width: modelData.key === "fan" ? 4 : 14; height: 3; radius: 1.5; color: parent.parent.modelData.color }
                     }
                 }
@@ -53,7 +53,7 @@ Card {
         Item { Layout.fillWidth: true }
         StyledText {
             visible: card.h.length < 2
-            text: "Veri toplanıyor…"
+            text: I18n.t("Collecting data…")
             color: Colours.fgDim
             font.pixelSize: 11
         }
@@ -78,7 +78,7 @@ Card {
                     StyledText { x: -26; y: -height / 2; text: modelData; color: Colours.fgDim; font.pixelSize: 9 }
                 }
             }
-            // Güvenlik sınırı
+            // Safety limit
             Rectangle {
                 width: plot.width; height: 1
                 y: card.py(Nbfc.safety)
@@ -86,7 +86,7 @@ Card {
                 opacity: 0.7
             }
             Repeater {
-                model: ["-10 dk", "-5 dk", "şimdi"]
+                model: [I18n.t("-10 min"), I18n.t("-5 min"), I18n.t("now")]
                 StyledText {
                     x: index / 2 * plot.width - (index === 0 ? 0 : index === 2 ? width : width / 2)
                     y: plot.height + 4

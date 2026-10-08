@@ -3,8 +3,8 @@ import Quickshell
 import QtQuick
 import qs.utils
 
-// Oturum açılınca arka planda başlatma: make install ile kurulan systemd kullanıcı servisi (ccenter.service).
-// Kurulum yoksa (geliştirme kopyası) anahtar kapalı kalır. Sadece kullanıcı anahtarı değiştirince systemctl çalışır.
+// Start in the background on login: the systemd user service ccenter.service installed by install.sh / make install.
+// Without an installation (development copy) the toggle stays disabled. systemctl only runs when the user flips the toggle.
 Singleton {
     id: root
     readonly property string unit: "ccenter.service"
@@ -25,7 +25,7 @@ Singleton {
         message = ""
         cmd.go(["systemctl", "--user", v ? "enable" : "disable", unit], (code, out, err) => {
             root.busy = false
-            if (code !== 0) root.message = "Başarısız: " + (err || out).trim().split("\n")[0]
+            if (code !== 0) root.message = I18n.t("Failed: %1").arg((err || out).trim().split("\n")[0])
             root.refresh()
         })
     }

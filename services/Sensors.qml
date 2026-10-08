@@ -4,23 +4,23 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// CPU / GPU / iGPU sıcaklıkları (hwmon + NVIDIA için nvidia-smi). Sadece sayfa görünürken okur.
+// CPU / GPU / iGPU temperatures (hwmon + nvidia-smi for NVIDIA). Read only while needed (see shell.qml).
 Singleton {
     id: root
     property bool active: true
-    // fast: pencere açık ya da Ccenter fan kontrol ediyor -> 3 sn'de bir, GPU her turda.
-    // Değilse 5 sn'de bir ve GPU (nvidia-smi, pahalı) 4 turda bir (~20 sn).
+    // fast: window open or Ccenter driving fans -> every 3 s, GPU every round.
+    // Otherwise every 5 s and the GPU (nvidia-smi, expensive) every 4th round (~20 s).
     property bool fast: true
     property int tick: 0
     property real lastNv: NaN
     property string lastNvNote: ""
-    property var readings: []     // [{ label, model, value (°C ya da NaN), note }]
+    property var readings: []     // [{ label, model, value (°C or NaN), note }]
     property var hw: ({ cpu: "", cores: "", gpu: "", igpu: "" })
-    // Fan kontrolü için: harici GPU sıcaklığı (uykuda / yoksa NaN)
+    // For fan control: discrete GPU temperature (NaN when asleep / absent)
     readonly property real gpu: { const r = readings.find(x => x.label === "GPU"); return r ? r.value : NaN }
     readonly property bool hasGpu: readings.some(x => x.label === "GPU")
-    // Fan RPM: sürücü bir kez bile 0'dan büyük değer verdiyse güvenilir sayılır (bazı sürücüler hep 0 döndürür)
-    property var rpms: []                    // fan sırasıyla (fan1 -> 0)
+    // Fan RPM: trusted once the driver has reported a value above 0 (some drivers always return 0)
+    property var rpms: []                    // in fan order (fan1 -> 0)
     property bool rpmWorks: false
     function rpm(i) { return rpmWorks && i < rpms.length ? rpms[i] : NaN }
 
@@ -57,7 +57,7 @@ Singleton {
         for (const line of txt.split("\n")) {
             const p = line.split("|")
             if (p[0] === "fan" && p.length === 4) {
-                if (fanDrv === "") fanDrv = p[1]          // ilk fan sürücüsü (hp, thinkpad, dell_smm…)
+                if (fanDrv === "") fanDrv = p[1]          // first fan driver (hp, thinkpad, dell_smm, ...)
                 if (p[1] === fanDrv) fanRpm[parseInt(p[2]) - 1] = parseInt(p[3])
                 continue
             }
@@ -65,8 +65,8 @@ Singleton {
             const n = p[0], l = p[1].toLowerCase(), raw = p[2]
             if (n === "nvidia" || n === "nouveau") {
                 hasNv = true
-                if (raw === "atla") { nv = lastNv; nvNote = lastNvNote }    // bu tur okunmadı: son değer
-                else if (raw === "uyku") nvNote = "Uykuda"
+                if (raw === "skip") { nv = lastNv; nvNote = lastNvNote }    // not read this round: last value
+                else if (raw === "asleep") nvNote = I18n.t("Asleep")
                 else nv = Math.max(isFinite(nv) ? nv : -1, parseInt(raw) / 1000)
                 continue
             }
@@ -86,13 +86,13 @@ Singleton {
             }
         }
         const cpu = isFinite(pkg) ? pkg : (isFinite(amdCpu) ? amdCpu : (isFinite(coreMax) ? coreMax : acpi))
-        const out = [{ label: "CPU", model: hw.cpu, extra: hw.cores !== "" ? hw.cores + " iş parçacığı" : "", value: cpu, note: "" }]
+        const out = [{ label: "CPU", model: hw.cpu, extra: hw.cores !== "" ? I18n.t("%1 threads").arg(hw.cores) : "", value: cpu, note: "" }]
         let gpu = nv
         if (isFinite(amdGpu)) { if (hasNv) igpu = amdGpu; else gpu = amdGpu }
         if (hasNv || isFinite(gpu) || hw.gpu !== "") out.push({ label: "GPU", model: hw.gpu, extra: "", value: gpu, note: nvNote })
         if (isFinite(igpu) || hw.igpu !== "")
-            out.push({ label: "iGPU", model: hw.igpu, extra: "", value: igpu, note: isFinite(igpu) ? "" : "Sensör yok" })
-        if (hasNv) { lastNv = nv; lastNvNote = nvNote }   // "atla" turlarında bu değer kullanılır
+            out.push({ label: "iGPU", model: hw.igpu, extra: "", value: igpu, note: isFinite(igpu) ? "" : I18n.t("No sensor") })
+        if (hasNv) { lastNv = nv; lastNvNote = nvNote }   // used on rounds where the GPU is skipped
         readings = out
         rpms = Array.from(fanRpm, v => isFinite(v) ? v : NaN)
         if (rpms.some(v => v > 0)) rpmWorks = true

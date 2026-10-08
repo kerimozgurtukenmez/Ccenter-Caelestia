@@ -3,26 +3,27 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 
-// Sistem tepsisi ikonu: scripts/tray.py'yi alt süreç olarak çalıştırır (Caelestia barında görünür).
-// Durum JSON satırı olarak stdin'e yazılır; tray.py tıklamaları stdout'a komut olarak yazar.
+// Tray icon: runs scripts/tray.py as a child process (shows up in Caelestia's bar).
+// State goes to its stdin as JSON lines; tray.py writes clicks to stdout as commands.
 Singleton {
     id: root
     readonly property bool enabled: Settings.uiOn("tray")
-    // Tepsi ikonu: uygulama ikonu (yüklenemezse tema ikonu "ccenter")
+    // Tray icon: the app icon (theme icon "ccenter" if it can't be loaded)
     readonly property string iconFile: Quickshell.shellPath("assets/ccenter.svg")
 
-    // shell.qml bağlar
+    // bound in shell.qml
     property bool windowVisible: true
     property var profiles: []
     property string active: ""
     property bool boost: false
     property string tooltip: "Ccenter"
+    property var labels: ({})                 // menu texts in the UI language (bound in shell.qml)
 
     signal toggleRequested()
     signal profileRequested(string name)
 
     readonly property string stateLine: JSON.stringify({ profiles: profiles, active: active, boost: boost,
-                                                         visible: windowVisible, tooltip: tooltip })
+                                                         visible: windowVisible, tooltip: tooltip, labels: labels })
     onStateLineChanged: push()
     function push() { if (proc.running) proc.write(stateLine + "\n") }
 

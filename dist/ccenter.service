@@ -1,24 +1,24 @@
-# Ccenter arka plan servisi (systemd kullanıcı servisi).
-# install.sh bunu ~/.local/share/systemd/user altına, make install <önek>/lib/systemd/user altına kurar;
-# @BINDIR@ kurulumda ccenter'ın bulunduğu klasörle değiştirilir.
-# Uygulamadaki "Oturum açılınca arka planda başlat" anahtarı bunu etkinleştirir/devre dışı bırakır.
-# Elle: systemctl --user enable --now ccenter.service   |   kapatmak: systemctl --user disable --now ccenter.service
+# Ccenter background service (systemd user service).
+# install.sh installs it into ~/.local/share/systemd/user, make install into <prefix>/lib/systemd/user;
+# @BINDIR@ is replaced at install time with the folder that contains ccenter.
+# The app's "start in background on login" toggle enables/disables it.
+# Manually: systemctl --user enable --now ccenter.service   |   off: systemctl --user disable --now ccenter.service
 [Unit]
-Description=Ccenter - fan ve klavye kontrol merkezi (arka plan)
+Description=Ccenter - fan and keyboard control center (background)
 PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
 Type=simple
-# Pencere açılmadan başlar; açmak için: ccenter
+# Starts without a window; to open it: ccenter
 ExecStart=@BINDIR@/ccenter --background
-# Durdururken önce düzgün kapanmasını iste: klavye efekti sabit renge, fanlar NBFC'ye döner (Tamamen kapat ile aynı)
+# When stopping, ask it to quit cleanly first: keyboard effect to the static colour, fans to NBFC (same as Quit)
 ExecStop=-@BINDIR@/ccenter quit
-# Yine de (çökme, zaman aşımı) fanlar NBFC'nin otomatik kontrolüne döner
+# In any case (crash, timeout) the fans go back to NBFC's automatic control
 ExecStopPost=-/usr/bin/nbfc set -a
 Restart=on-failure
 RestartSec=3
-# Başka bir Ccenter kopyası açıksa ccenter 3 ile çıkar: tekrar tekrar başlatmaya çalışma
+# If another Ccenter copy is running, ccenter exits with 3: don't keep restarting
 RestartPreventExitStatus=3
 
 [Install]

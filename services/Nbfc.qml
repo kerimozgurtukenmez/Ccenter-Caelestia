@@ -4,11 +4,11 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// nbfc-linux ile konuşan arka uç. Fan hızı ayarı root istemez; servis/config işlemleri pkexec ile yapılır.
+// Backend talking to nbfc-linux. Setting fan speeds needs no root; service/config actions go through pkexec.
 Singleton {
     id: root
 
-    // ---- durum ----
+    // ---- state ----
     property bool running: false
     property bool readOnly: false
     property string configId: ""
@@ -19,14 +19,14 @@ Singleton {
     property var recommended: []
     property string message: ""
     property bool messageError: false
-    property real safety: isFinite(Settings.safety()) ? Settings.safety() : 90   // bu sıcaklıkta özel modlardaki fanlar %100'e çıkar
+    property real safety: isFinite(Settings.safety()) ? Settings.safety() : 90   // at this temperature fans in Fixed/Curve mode go to 100%
 
-    property var targets: ({})            // fan index -> { mode, fixed, curve }  (sadece Sabit/Eğri)
+    property var targets: ({})            // fan index -> st (only for Fixed/Curve fans)
     property var lastSent: ({})
     property var queue: []
     property bool logged: false
 
-    // ---------- komut kuyruğu (komutlar sırayla çalışır) ----------
+    // ---------- command queue (commands run one after another) ----------
     function enqueue(key, cmd, cb) {
         const q = queue.filter(e => key === "" || e.key !== key)
         q.push({ key: key, cmd: cmd, cb: cb })
@@ -45,7 +45,7 @@ Singleton {
     function firstLine(s) { return s.trim().split("\n")[0] }
     function lines(s) { return s.split("\n").map(l => l.trim()).filter(l => l !== "") }
 
-    // root isteyen işler
+    // actions that need root
     function sudo(args, label, then) {
         message = label
         messageError = false
@@ -53,7 +53,7 @@ Singleton {
             if (code === 0) {
                 root.message = ""
             } else {
-                root.message = "Başarısız: " + root.firstLine(err !== "" ? err : out) + " (kod " + code + ")"
+                root.message = I18n.t("Failed: %1").arg(root.firstLine(err !== "" ? err : out) + " (" + I18n.t("code %1").arg(code) + ")")
                 root.messageError = true
             }
             if (then) then(code)
@@ -61,22 +61,22 @@ Singleton {
         })
     }
 
-    // ---------- servis ----------
-    property bool userStopped: false         // servisi kullanıcı durdurduysa "beklenmedik durdu" bildirimi gitmez
-    signal serviceLost()                     // çalışan servis beklenmedik şekilde durdu
-    signal commandFailed(string msg)         // fan hızı yazılamadı
-    signal boostEnded()                      // süreli maksimum fan bitti
+    // ---------- service ----------
+    property bool userStopped: false         // if the user stopped the service, don't send the "stopped unexpectedly" notification
+    signal serviceLost()                     // a running service stopped unexpectedly
+    signal commandFailed(string msg)         // a fan speed could not be written
+    signal boostEnded()                      // a timed max fan run ended
 
-    function startService() { userStopped = false; sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), "Yönetici izni bekleniyor…") }
-    function stopService() { userStopped = true; sudo(["nbfc", "stop"], "Yönetici izni bekleniyor…") }
-    function restartService(ro) { sudo(["nbfc", "restart"].concat(ro ? ["-r"] : []), "Yönetici izni bekleniyor…") }
+    function startService() { userStopped = false; sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), I18n.t("Waiting for admin permission…")) }
+    function stopService() { userStopped = true; sudo(["nbfc", "stop"], I18n.t("Waiting for admin permission…")) }
+    function restartService(ro) { sudo(["nbfc", "restart"].concat(ro ? ["-r"] : []), I18n.t("Waiting for admin permission…")) }
     function setReadOnly(v) {
         const was = root.running
         readOnly = v
         if (was) restartService(v)
     }
     function setBoot(v) {
-        sudo(["systemctl", v ? "enable" : "disable", "nbfc_service"], "Yönetici izni bekleniyor…", () => root.refreshBoot())
+        sudo(["systemctl", v ? "enable" : "disable", "nbfc_service"], I18n.t("Waiting for admin permission…"), () => root.refreshBoot())
     }
     function refreshBoot() {
         enqueue("boot", ["systemctl", "is-enabled", "nbfc_service"], (code, out) => { root.bootEnabled = out.trim() === "enabled" })
@@ -88,7 +88,7 @@ Singleton {
     property string cfgNoteCli: ""
     property string configNote: ""
 
-    // Liste: önce config klasörü (dosya adı = config adı), yoksa `nbfc config -l`. Seçili config her zaman listede.
+    // List: the config folders first (file name = config name), otherwise `nbfc config -l`. The selected config is always listed.
     function mergeConfigs() {
         const src = cfgFromDir.length > 0 ? cfgFromDir : cfgFromCli
         const seen = {}
@@ -100,22 +100,22 @@ Singleton {
         configs = all
         const from = cfgFromDir.length > 0 ? " (" + cfgDirs + ")" : cfgFromCli.length > 0 ? " (nbfc config -l)" : ""
         const onlyCurrent = cfgFromDir.length === 0 && cfgFromCli.length === 0
-        configNote = (all.length > 0 ? all.length + " config" + from : "Liste alınamadı")
-                   + (onlyCurrent ? " · sadece seçili config biliniyor, config klasörü bulunamadı" : "")
+        configNote = (all.length > 0 ? all.length + " config" + from : I18n.t("Could not get the list"))
+                   + (onlyCurrent ? " · " + I18n.t("only the selected config is known, no config folder found") : "")
                    + (cfgNoteCli !== "" && cfgFromDir.length === 0 ? " · " + cfgNoteCli : "")
     }
     property string cfgDirs: ""
     function loadConfigs() {
-        // stdout + stderr birlikte; bazı sürümler listeyi stderr'e ya da farklı biçimde basabiliyor
+        // stdout + stderr together; some versions print the list to stderr or in a different format
         enqueue("cfg:list", ["sh", "-c", "nbfc config -l 2>&1"], (code, out) => {
             const ls = root.lines(out).filter(l => !/^(usage|error|warning)/i.test(l))
-            console.log("[ccenter] nbfc config -l (çıkış " + code + "): " + ls.length + " satır; ilk: " + (ls[0] || "-"))
+            console.log("[ccenter] nbfc config -l (exit " + code + "): " + ls.length + " lines; first: " + (ls[0] || "-"))
             root.cfgFromCli = code === 0 ? ls : []
-            root.cfgNoteCli = code === 0 ? (ls.length === 0 ? "nbfc config -l boş döndü" : "")
-                                         : "nbfc config -l başarısız (kod " + code + "): " + root.firstLine(out)
+            root.cfgNoteCli = code === 0 ? (ls.length === 0 ? I18n.t("nbfc config -l returned nothing") : "")
+                                         : I18n.t("nbfc config -l failed (code %1): %2").arg(code).arg(root.firstLine(out))
             root.mergeConfigs()
         })
-        // Bilinen tüm config klasörleri; satır biçimi: klasör|dosyaadı
+        // All known config folders; line format: folder|filename
         enqueue("cfg:dir", ["sh", "-c",
             'for d in /usr/share/nbfc/configs /usr/local/share/nbfc/configs /var/lib/nbfc/configs /etc/nbfc/configs /opt/nbfc/configs; do ' +
             '[ -d "$d" ] && find "$d" -maxdepth 1 -name "*.json" -printf "$d|%f\\n"; done'], (code, out) => {
@@ -132,8 +132,8 @@ Singleton {
             root.mergeConfigs()
         })
     }
-    // Seçili config'in her fan için eşik tablosu, bizim eğri biçiminde (config dosyası sadece okunur).
-    // [{ points: [{t, s}], hyst } | null]  — null: config eşik tablosu tanımlamıyor
+    // The selected config's threshold table per fan, as our curve format (the config file is only read).
+    // [{ points: [{t, s}], hyst } | null]  - null: the config defines no threshold table
     property var configCurves: []
     function loadConfigCurves() {
         const id = configId
@@ -149,14 +149,14 @@ Singleton {
             }
         })
     }
-    // NBFC: sıcaklık UpThreshold'a ulaşınca FanSpeed'e çık, DownThreshold altına inince geri dön = basamaklı eğri
+    // NBFC: go to FanSpeed when the temperature reaches UpThreshold, back below DownThreshold = a stepped curve
     function toCurve(th) {
         if (!Array.isArray(th) || th.length === 0) return null
         const rows = th.map(r => ({ up: Number(r.UpThreshold), down: Number(r.DownThreshold), s: Number(r.FanSpeed) }))
                        .filter(r => isFinite(r.up) && isFinite(r.s)).sort((a, b) => a.up - b.up)
         const pts = []
         for (const r of rows) {
-            let t = Math.max(30, Math.min(100, Math.round(r.up)))     // editör aralığı 30..100
+            let t = Math.max(30, Math.min(100, Math.round(r.up)))     // editor range 30..100
             if (pts.length && t <= pts[pts.length - 1].t) t = pts[pts.length - 1].t + 1
             if (t > 100) break
             pts.push({ t: t, s: Math.max(0, Math.min(100, Math.round(r.s))) })
@@ -179,14 +179,14 @@ Singleton {
                 }
             }
             root.recommended = found
-            if (found.length === 0) { root.message = "Öneri bulunamadı"; root.messageError = false }
+            if (found.length === 0) { root.message = I18n.t("No recommendation found"); root.messageError = false }
         })
     }
     function applyConfig(name) {
-        sudo(["sh", "-c", 'nbfc config -s "$1" && nbfc restart $2', "sh", name, readOnly ? "-r" : ""], "Yönetici izni bekleniyor…")
+        sudo(["sh", "-c", 'nbfc config -s "$1" && nbfc restart $2', "sh", name, readOnly ? "-r" : ""], I18n.t("Waiting for admin permission…"))
     }
 
-    // ---------- durum okuma ----------
+    // ---------- reading the status ----------
     function isTrue(v) { return /^(true|yes|on|enabled|1)/i.test(v.trim()) }
 
     function parseStatus(txt) {
@@ -234,7 +234,7 @@ Singleton {
         statusCmd.go(["nbfc", "status", "-a"], (code, out, err) => {
             if (!root.logged) {
                 root.logged = true
-                console.log("[ccenter] nbfc status -a (çıkış " + code + "):\n" + out + err)
+                console.log("[ccenter] nbfc status -a (exit " + code + "):\n" + out + err)
             }
             const was = root.running
             root.running = code === 0
@@ -251,29 +251,29 @@ Singleton {
         })
     }
 
-    // ---------- fan kontrolü ----------
-    // Sabit/Eğri modunda fan varsa sensörler pencere kapalıyken de okunur (güvenlik sınırı GPU'yu da izlesin)
+    // ---------- fan control ----------
+    // With a fan in Fixed/Curve mode, sensors are read even while the window is closed (the safety limit watches the GPU too)
     readonly property bool needsSensors: Object.keys(targets).length > 0
-    // Ccenter fanları kontrol ediyor mu (Sabit/Eğri/maksimum): öyleyse sık okunur
+    // Is Ccenter driving fans (Fixed/Curve/max fan)? Then poll often
     readonly property bool controlling: needsSensors || boosting
-    property bool uiVisible: true             // pencere açık mı (shell.qml bağlar); gizliyken sakin tempo
+    property bool uiVisible: true             // is the window open (bound in shell.qml); slower polling while hidden
 
-    // NBFC'nin bu fan için okuduğu sıcaklık (config'teki sensör; bu makinede CPU)
+    // The temperature NBFC reads for this fan (the sensor from the config; CPU on most laptops)
     function tempOf(i) {
         const t = fans[i] ? fans[i].temp : NaN
         return isFinite(t) ? t : temp
     }
-    // st.src: "cpu" (NBFC sensörü, varsayılan) | "gpu" | "max". GPU okunamıyorsa (uyku/yok) CPU'ya düşer.
+    // st.src: "cpu" (NBFC's sensor, default) | "gpu" | "max". Falls back to CPU if the GPU can't be read (asleep/absent).
     function sourceTemp(i, src) {
         const c = tempOf(i), g = Sensors.gpu
         if (src === "gpu") return isFinite(g) ? g : c
         if (src === "max") return isFinite(g) ? (isFinite(c) ? Math.max(c, g) : g) : c
         return c
     }
-    // Güvenlik sınırı her zaman en sıcak olana bakar
+    // The safety limit always looks at the hottest one
     function hottest(i) { return sourceTemp(i, "max") }
 
-    // st.curve = [{ t: °C, s: % }] (sıcaklığa göre sıralı), st.smooth = noktalar arası düz geçiş mi
+    // st.curve = [{ t: °C, s: % }] (sorted by temperature), st.smooth = straight lines between points (else steps)
     function curveAt(st, T) {
         const p = st.curve
         if (!p || p.length === 0) return NaN
@@ -287,11 +287,11 @@ Singleton {
         return p[p.length - 1].s
     }
 
-    // Eğri modunda fanın şu anki seviyesi (%): histerezis ve kademeli yavaşlama bunun üzerinden çalışır
+    // Current level of a fan in Curve mode (%): hysteresis and the gradual slow-down work on this
     property var level: ({})
-    readonly property int rampDown: 5        // her kontrol turunda (2 sn) en fazla bu kadar yavaşlar
+    readonly property int rampDown: 5        // slows down by at most this much per control round (2 s)
 
-    // Hızlanma hemen; yavaşlama için sıcaklık eğrinin st.hyst °C altına inmeli, sonra kademeli iner
+    // Speed up immediately; to slow down the temperature must drop st.hyst °C below the curve, then step down gradually
     function curveLevel(i, st, T) {
         const up = curveAt(st, T)
         const prev = level[i]
@@ -301,17 +301,17 @@ Singleton {
         return Math.max(target, prev - rampDown)
     }
 
-    // idx = fan index, -1 = tüm fanlar. st = { mode: 0 oto | 1 sabit | 2 eğri, fixed: 0..1, curve: [{t,s}], smooth }
+    // idx = fan index, -1 = all fans. st = { mode: 0 auto | 1 fixed | 2 curve, fixed: 0..1, curve: [{t,s}], smooth }
     function applyTarget(idx, st) {
         const ids = idx < 0 ? fans.map((f, i) => i) : [idx]
         const t = Object.assign({}, targets)
         for (const i of ids) {
             lastSent[i] = undefined
-            level[i] = undefined                    // ayar değişti: yeni eğri hemen geçerli
+            level[i] = undefined                    // setting changed: the new curve applies immediately
             if (st.mode === 0) delete t[i]; else t[i] = st
         }
         targets = t
-        if (boosting) return                         // maksimum fan bitince her fan kendi ayarına döner
+        if (boosting) return                         // while max fan runs, each fan returns to its own setting when it ends
         if (st.mode === 0) {
             enqueue(idx < 0 ? "auto:all" : "auto:" + idx,
                     idx < 0 ? ["nbfc", "set", "-a"] : ["nbfc", "set", "-f", String(idx), "-a"], null)
@@ -320,22 +320,22 @@ Singleton {
         }
     }
 
-    // Her durum okumasından sonra çalışır: Sabit/Eğri modundaki fanlara hız yazar
+    // Runs after every status read: writes speeds to fans in Fixed/Curve mode
     function control() {
         if (!root.running || readOnly || quitting) return
         for (let i = 0; i < fans.length; i++) {
-            if (boosting) {                          // maksimum fan: tüm fanlar %100
+            if (boosting) {                          // max fan: all fans at 100%
                 if (fans[i].auto) lastSent[i] = undefined
                 if (lastSent[i] !== 100) { lastSent[i] = 100; send(i, 100) }
                 continue
             }
             const t = targets[i]
             if (!t) continue
-            if (fans[i].auto) lastSent[i] = undefined   // servis auto'ya dönmüşse yeniden yaz
+            if (fans[i].auto) lastSent[i] = undefined   // the service went back to auto: write again
             const T = sourceTemp(i, t.src)
             const H = hottest(i)
             let pct
-            if (isFinite(H) && H >= safety) { pct = 100; level[i] = 100 }   // güvenlik her şeyin önünde
+            if (isFinite(H) && H >= safety) { pct = 100; level[i] = 100 }   // safety comes first
             else if (t.mode === 1) { pct = t.fixed * 100; level[i] = undefined }
             else if (isFinite(T)) { pct = curveLevel(i, t, T); level[i] = pct }
             else continue
@@ -352,13 +352,13 @@ Singleton {
     function send(i, pct) {
         enqueue("spd:" + i, ["nbfc", "set", "-f", String(i), "-s", String(pct)], (code, out, err) => {
             if (code === 0) return
-            root.lastSent[i] = undefined             // sonraki turda yeniden dener
-            root.commandFailed("Fan " + (i + 1) + " hızı yazılamadı: " + root.firstLine(err !== "" ? err : out))
+            root.lastSent[i] = undefined             // retried on the next round
+            root.commandFailed(I18n.t("Could not set the speed of fan %1: %2").arg(i + 1).arg(root.firstLine(err !== "" ? err : out)))
         })
     }
 
-    // ---------- maksimum fan ----------
-    // boostUntil: 0 kapalı, -1 süresiz, >0 bitiş zamanı (ms)
+    // ---------- max fan ----------
+    // boostUntil: 0 off, -1 until turned off, >0 end time (ms)
     property double boostUntil: 0
     readonly property bool boosting: boostUntil !== 0
     function setBoost(minutes) {
@@ -366,7 +366,7 @@ Singleton {
         else if (minutes < 0) boostUntil = -1
         else if (boosting) {
             boostUntil = 0
-            // her fan kendi ayarına: kaydı olmayanlar NBFC otomatiğe, Sabit/Eğri olanlar yeniden hesaplanır
+            // each fan back to its own setting: fans without one go to NBFC auto, Fixed/Curve ones are recomputed
             for (let i = 0; i < fans.length; i++) {
                 lastSent[i] = undefined
                 level[i] = undefined
@@ -379,8 +379,8 @@ Singleton {
         if (boostUntil > 0 && Date.now() >= boostUntil) { setBoost(0); boostEnded() }
     }
 
-    // ---------- geçmiş (son 10 dk, her durum okumasında bir örnek) ----------
-    property var history: []                 // [{ t: ms, cpu: °C, gpu: °C|NaN, fan: % (ortalama) }]
+    // ---------- history (last 10 minutes, one sample per status read) ----------
+    property var history: []                 // [{ t: ms, cpu: °C, gpu: °C|NaN, fan: % (average) }]
     readonly property int historyMs: 600000
     function record() {
         const now = Date.now()
@@ -390,16 +390,16 @@ Singleton {
         history = h
     }
 
-    // Uygulamayı tamamen kapat: önce kontrol ettiğimiz fanları NBFC'nin otomatik kontrolüne geri ver
+    // Quit completely: first hand the fans we control back to NBFC's automatic control
     property bool quitting: false
     function releaseAndQuit() {
         if (quitting) return
         quitting = true
-        // Önce klavye efektini sabit renge döndür (yarıda karanlık kalmasın), sonra fanları bırak
+        // Keyboard effect back to the static colour first (so it isn't left dark mid-fade), then release the fans
         Keyboard.restoreForQuit(() => root.releaseFansAndQuit())
     }
     function releaseFansAndQuit() {
-        Settings.flush()                      // bekleyen ayar değişikliği kaybolmasın
+        Settings.flush()                      // don't lose a pending settings change
         const owned = Object.keys(targets).length > 0 || boosting
         targets = ({})
         boostUntil = 0
@@ -407,10 +407,10 @@ Singleton {
         else Qt.quit()
     }
 
-    // ---------- altyapı ----------
+    // ---------- plumbing ----------
     Cmd { id: runner }
     Cmd { id: statusCmd }
-    // Pencere açıkken ya da fan kontrol ederken 2 sn; gizli ve her şey NBFC'deyken 5 sn
+    // 2 s while the window is open or Ccenter drives fans; 5 s when hidden and everything is on NBFC
     Timer { interval: root.uiVisible || root.controlling ? 2000 : 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
 
     FileView {

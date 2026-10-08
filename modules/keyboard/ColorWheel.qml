@@ -10,7 +10,7 @@ Item {
     implicitWidth: 220
     implicitHeight: 220
 
-    // Çark önceden üretilmiş görsel (assets/wheel.png)
+    // The wheel is a pre-rendered image (assets/wheel.png; Canvas didn't render in this setup)
     Image {
         anchors.fill: parent
         source: Quickshell.shellPath("assets/wheel.png")
@@ -29,7 +29,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        preventStealing: true             // sürüklerken sayfa kaymasın
+        preventStealing: true             // don't scroll the page while dragging
         cursorShape: Qt.CrossCursor
         function pick(m) {
             const r = width / 2

@@ -4,51 +4,51 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// Klavye ışığı (çekirdeğin LED arayüzü): /sys/class/leds/*::kbd_backlight
-//   brightness (0..max_brightness), RGB ise multi_intensity "r g b" (0..multi_max_intensity)
-// Bölge (zone) yok: tüm klavye tek renk. Yazma izni kurulumdaki udev kuralından gelir (dist/90-ccenter.rules).
-// Efektler yazılımla çalışır (bu servis her zaman çalıştığı için pencere kapalıyken de sürer):
-//   breathing: renk yoğunluğu en düşük ve en yüksek seviye arasında yumuşakça gidip gelir; renk en karanlık anda değişir.
-//   cycle:     renkler arasında yanıp sönmeden, ton üzerinden sürekli ve yumuşak geçiş.
+// Keyboard backlight (the kernel LED interface): /sys/class/leds/*::kbd_backlight
+//   brightness (0..max_brightness); if RGB, multi_intensity "r g b" (0..multi_max_intensity)
+// No zones: the whole keyboard is one colour. Write access comes from the optional udev rule (dist/90-ccenter.rules).
+// Effects are done in software (this service always runs, so they continue while the window is closed):
+//   breathing: intensity eases between the lowest and highest level; the colour changes at the darkest point.
+//   cycle:     continuous smooth transition between colours along the hue, without dimming.
 Singleton {
     id: root
 
-    property string dir: ""                   // ör. /sys/class/leds/hp::kbd_backlight
+    property string dir: ""                   // e.g. /sys/class/leds/hp::kbd_backlight
     readonly property bool available: dir !== ""
     readonly property string name: dir.slice(dir.lastIndexOf("/") + 1)
     property bool rgb: false
     property bool writable: false
-    property bool ready: false                // ilk okuma bitti mi
+    property bool ready: false                // first read finished?
     property int maxBrightness: 255
     property var maxIntensity: [255, 255, 255]
     property int brightness: 0
-    property color color: "white"             // seçilen renk (tam yoğunlukta; parlaklık ayrı)
+    property color color: "white"             // chosen colour (at full intensity; brightness is separate)
     property string error: ""
-    // Yazma izni veren udev kuralı nerede: "etc" (install.sh / "İzin ver" ekledi, uygulamadan kaldırılabilir),
-    // "lib" (sistem paketi ekledi), "" (yok)
+    // Where the udev rule granting write access lives: "etc" (added by install.sh / "grant" button, removable from the app),
+    // "lib" (added by a system package), "" (none)
     property string ruleAt: ""
     property bool permBusy: false
 
-    // ---------- efekt ayarları (settings.json → kbd) ----------
+    // ---------- effect settings (settings.json -> kbd) ----------
     property string effect: "static"          // static | breathing | cycle
-    property string source: "single"          // single (seçilen renk) | multi (renk listesi) | theme (Caelestia)
+    property string source: "single"          // single (chosen colour) | multi (colour list) | theme (Caelestia)
     property var colors: ["#ff0000", "#00ff00", "#0040ff"]
-    property real speed: 0.5                  // 0 yavaş .. 1 hızlı
-    readonly property real period: 8 - 7 * speed   // bir nefes (sn): 8 .. 1
-    property bool paused: false               // izin kaldırılırken efekt duraklar (tercih korunur)
+    property real speed: 0.5                  // 0 slow .. 1 fast
+    readonly property real period: 8 - 7 * speed   // one breath / one colour (s): 8 .. 1
+    property bool paused: false               // effect pauses while the permission is being revoked (the saved choice is kept)
     readonly property bool effectActive: effect !== "static" && rgb && writable && !paused
-    property int cycleIndex: 0                // şu an nefes alan rengin sırası (arayüz gösterir)
-    property int themeCount: 3                // Caelestia kaynağında kaç renk (3..6)
-    property real minLevel: 0                 // nefesin en düşük seviyesi (0..1); 0 = tamamen söner
-    property real maxLevel: 1                 // nefesin en yüksek seviyesi (0..1)
+    property int cycleIndex: 0                // index of the colour currently shown (the UI highlights it)
+    property int themeCount: 3                // number of Caelestia colours (3..6)
+    property real minLevel: 0                 // lowest breathing level (0..1); 0 = fully off
+    property real maxLevel: 1                 // highest breathing level (0..1)
 
-    // Caelestia renkleri LED için canlandırılır (tema pastel; doygunluk düşükse LED beyazımsı görünür)
+    // Caelestia colours are made vivid for the LED (theme colours are pastel; low saturation looks whitish on an LED)
     function vivid(c) {
         c = Qt.lighter(c, 1)
         return c.hsvSaturation < 0.05 ? Qt.rgba(1, 1, 1, 1) : Qt.hsva(c.hsvHue, Math.max(c.hsvSaturation, 0.85), 1, 1)
     }
-    // Tema renkleri: önce temanın ana rengi, sonra secondary/tertiary ve temanın vurgu renkleri arasından
-    // tonu öncekilere en uzak olanlar (themeCount kadar). Hepsi temadan; birbirine benzeyenler elenir.
+    // Theme colours: the theme's primary colour first, then from secondary/tertiary and the theme's accent colours
+    // the hues furthest from the ones already picked (themeCount in total). All from the theme; look-alikes are skipped.
     readonly property var themeColors: {
         const base = [vivid(Colours.primary)]
         const pool = [Colours.secondary, Colours.tertiary].concat(Colours.accents).map(vivid)
@@ -65,13 +65,13 @@ Singleton {
         }
         return out
     }
-    // Efektin döndüğü renkler
+    // Colours the effect goes through
     readonly property var cycle: source === "multi" ? colors.map(x => Qt.lighter(x, 1))
                                : source === "theme" ? themeColors : [color]
 
-    // ---------- okuma ----------
+    // ---------- reading ----------
     function refresh(done) {
-        // Tek seferde: dizin, yazılabilirlik, değerler. Sadece kabuk yerleşikleri (read).
+        // One go: directory, writability, values. Shell builtins only (read).
         reader.go(["sh", "-c",
             'for d in /sys/class/leds/*::kbd_backlight; do [ -e "$d/brightness" ] || continue; ' +
             'echo "dir|$d"; ' +
@@ -91,7 +91,7 @@ Singleton {
             if (k === "w") w[val] = true
             else v[k] = val
         }
-        if (!ready) loadSaved()               // ilk okumada kayıtlı efekt ayarlarını yükle (ayar dosyası bu noktada hazır)
+        if (!ready) loadSaved()               // load saved effect settings on the first read (the settings file is ready by now)
         ruleAt = /rule\|etc/.test(out) ? "etc" : /rule\|lib/.test(out) ? "lib" : ""
         dir = v.dir || ""
         rgb = !!v.multi_intensity && /red/.test(v.multi_index || "") && /green/.test(v.multi_index || "")
@@ -99,7 +99,7 @@ Singleton {
         maxBrightness = parseInt(v.max_brightness) || 255
         brightness = parseInt(v.brightness) || 0
         if (rgb) maxIntensity = (v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
-        // Efekt çalışırken donanımdaki renk anlık efekt karesidir; seçilen rengi onunla ezme
+        // While an effect runs, the hardware colour is just the current frame; don't overwrite the chosen colour with it
         if (rgb && !effectActive) {
             const it = v.multi_intensity.trim().split(/\s+/).map(x => parseInt(x) || 0)
             const order = (v.multi_index || "red green blue").trim().split(/\s+/)
@@ -109,26 +109,26 @@ Singleton {
         ready = true
     }
 
-    // ---------- yazma ----------
-    // renk (0..1) × seviye -> "R G B" (donanım ölçeğinde)
+    // ---------- writing ----------
+    // colour (0..1) x level -> "R G B" (hardware scale)
     function intensity(c, level) {
         return [c.r, c.g, c.b].map((x, i) => Math.round(Math.max(0, Math.min(1, x * level)) * (maxIntensity[i] ?? 255))).join(" ")
     }
-    // Değişiklikler hemen arayüze yansır; dosyaya en fazla ~12 kez/sn yazılır (sürüklerken)
+    // Changes show in the UI immediately; the file is written at most ~12 times/s (while dragging)
     property var pending: ({})
     function setBrightness(b) {
-        if (!writable) { refresh(); return }  // izin yoksa durumu değiştirme; izin sonradan verilmiş olabilir, yeniden bak
+        if (!writable) { refresh(); return }  // without permission don't change the state; it may have been granted meanwhile, so check again
         brightness = Math.max(0, Math.min(maxBrightness, Math.round(b)))
         queue("brightness", String(brightness))
     }
     function setColor(c) {
         if (!rgb) return
         if (!writable) { refresh(); return }
-        c = Qt.lighter(c, 1)                  // "#rrggbb" metni de gelebilir (terminal, hazır renkler): renge çevir
+        c = Qt.lighter(c, 1)                  // may also be a "#rrggbb" string (terminal, presets): convert to a colour
         color = Qt.rgba(c.r, c.g, c.b, 1)
         Settings.setKbd({ color: hex(color) })
-        if (!effectActive) queue("multi_intensity", intensity(color, 1))   // efekt varsa bir sonraki kare uygular
-        // Parlaklık 0 iken renk seçmek ışığı yakmaz; kullanıcı rengi görebilsin diye aç
+        if (!effectActive) queue("multi_intensity", intensity(color, 1))   // with an effect running, the next frame applies it
+        // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it
         if (brightness === 0) setBrightness(maxBrightness)
     }
     function queue(file, value) {
@@ -139,23 +139,23 @@ Singleton {
         if (!flush.running) flush.start()
     }
     function writeNext() {
-        // Renk önce, sonra parlaklık (renk değişince ışık bir an eski parlaklıkta kalmasın)
+        // Colour first, then brightness (so the light never shows the new colour at the old brightness)
         for (const f of ["multi_intensity", "brightness"])
             if (pending[f] !== undefined) send(f, pending[f])
         pending = ({})
     }
     Timer { id: flush; interval: 80; onTriggered: root.writeNext() }
 
-    // Sürekli açık tek yazıcı süreç (awk): her yazma için süreç başlatmak efekt sırasında (25 kare/sn) pahalı olurdu.
-    // awk girdiyi tamponlu okur (bash "read" boruyu bayt bayt okuyordu, ~2 kat pahalıydı; FileView ise ~3 kat).
-    // Her yazma iki satır: dosya yolu, değer. Yazılamazsa awk hata verip çıkar.
+    // One persistent writer process (awk): starting a process per write would be costly during effects (25 frames/s).
+    // awk reads its input buffered (bash "read" reads a pipe byte by byte, ~2x the CPU; Quickshell FileView ~3x).
+    // Each write is two lines: file path, value. If a write fails, awk prints an error and exits.
     function send(file, value) {
         if (writer.running) writer.write(dir + "/" + file + "\n" + value + "\n")
     }
     function writeFailed(why) {
-        error = "Klavye ışığına yazılamadı" + (why ? ": " + why : "")
-        effect = "static"                     // izin gittiyse efekti durdur (ayara yazılmaz)
-        refresh()                             // gerçek değeri ve izni geri oku
+        error = I18n.t("Could not write to the keyboard light") + (why ? ": " + why : "")
+        effect = "static"                     // permission lost: stop the effect (not saved to settings)
+        refresh()                             // re-read the real value and permission
     }
     Process {
         id: writer
@@ -163,32 +163,32 @@ Singleton {
         command: ["awk", "NR % 2 { f = $0; next } { print > f; close(f) }"]
         stdinEnabled: true
         stderr: SplitParser { onRead: line => root.writeFailed(line.replace(/^.*fatal: /, "")) }
-        // Çıkarsa (hata) yeniden başlat; sonraki yazmalar çalışsın
+        // If it exits (error), restart it so later writes work
         onExited: if (root.available) restartWriter.start()
     }
     Timer { id: restartWriter; interval: 1000; onTriggered: writer.running = true }
 
-    // ---------- efektler ----------
+    // ---------- effects ----------
     function setEffect(e) {
         if (e === effect) return
-        if (e === "cycle" && source === "single") setSource("multi")   // tek renkle geçiş olmaz
+        if (e === "cycle" && source === "single") setSource("multi")   // a cycle needs more than one colour
         effect = e
         Settings.setKbd({ effect: e })
-        if (e === "static") queue("multi_intensity", intensity(color, 1))   // efekt bitince seçilen renge dön
+        if (e === "static") queue("multi_intensity", intensity(color, 1))   // effect off: back to the chosen colour
         else { t0 = Date.now(); lastFrame = "" }
     }
     function setSource(s) { source = s; Settings.setKbd({ source: s }); lastFrame = "" }
     function setThemeCount(n) { themeCount = Math.max(3, Math.min(6, Math.round(n))); Settings.setKbd({ themeCount: themeCount }) }
     function setColors(list) { colors = list.slice(0, 6); Settings.setKbd({ colors: colors }) }
     function setSpeed(v) {
-        // Hız değişince nefes kaldığı yerden devam etsin (faz korunur)
+        // When the speed changes, continue from the same point of the breath (keep the phase)
         const now = Date.now(), p = ((now - t0) / 1000) / period
         speed = Math.max(0, Math.min(1, v))
         t0 = now - p * period * 1000
         saveSpeed.restart()
     }
     Timer { id: saveSpeed; interval: 500; onTriggered: Settings.setKbd({ speed: root.speed }) }
-    // En düşük/en yüksek seviye; biri diğerini geçerse onu da iter
+    // Lowest/highest level; if one passes the other, it pushes it along
     function setRange(lo, hi) {
         lo = Math.max(0, Math.min(1, lo))
         hi = Math.max(0, Math.min(1, hi))
@@ -203,17 +203,17 @@ Singleton {
 
     property double t0: Date.now()
     property string lastFrame: ""
-    // Ton üzerinden karışım: canlı renkler arasında geçişte araya koyu/bulanık renk girmesin (kırmızı→sarı→yeşil)
+    // Mix along the hue: no dark/muddy midpoint between vivid colours (red -> yellow -> green)
     function mixHsv(a, b, f) {
-        if (a.hsvSaturation < 0.05 || b.hsvSaturation < 0.05) return mix(a, b, f)   // beyaz/gri: düz karışım
+        if (a.hsvSaturation < 0.05 || b.hsvSaturation < 0.05) return mix(a, b, f)   // white/grey: plain RGB mix
         let d = b.hsvHue - a.hsvHue
         if (d > 0.5) d -= 1
         if (d < -0.5) d += 1
         const h = ((a.hsvHue + d * f) % 1 + 1) % 1
         return Qt.hsva(h, a.hsvSaturation + (b.hsvSaturation - a.hsvSaturation) * f, a.hsvValue + (b.hsvValue - a.hsvValue) * f, 1)
     }
-    // Çok düşük seviyede kanallar küçük tam sayılara yuvarlanınca ton kayar (pembe → [1 0 0] kırmızı gibi);
-    // en güçlü kanal bu eşiğin altına inerse ışık yanlış renk göstermek yerine kapanır
+    // At very low levels the channels round to tiny integers and the hue shifts (pink -> [1 0 0] red, for example);
+    // when the strongest channel drops below this threshold the light turns off instead of showing a wrong colour
     readonly property int lowCut: 8
     function frame(c, level) {
         const v = [c.r, c.g, c.b].map((x, i) => Math.max(0, Math.min(1, x * level)) * (maxIntensity[i] ?? 255))
@@ -229,39 +229,39 @@ Singleton {
         if (cycleIndex !== k % n) cycleIndex = k % n
         let v
         if (effect === "cycle") {
-            // Renk geçişi: k. renkten bir sonrakine, yavaş başlayıp yavaş biten yumuşak geçiş; ışık sönmez
+            // Colour cycle: from colour k to the next with an ease-in/ease-out transition; the light never dims
             const e = (1 - Math.cos(Math.PI * f)) / 2
             v = frame(n > 1 ? mixHsv(cycle[k % n], cycle[(k + 1) % n], e) : cycle[0], 1)
         } else {
-            // Nefes: her nefes bir renk; renk en karanlık anda (f = 0) değişir, araya başka renk girmez
-            const l = Math.pow((1 - Math.cos(2 * Math.PI * f)) / 2, 1.8)   // 0 → 1 → 0, koyu kısım biraz uzun (göz algısı)
+            // Breathing: one colour per breath; the colour changes at the darkest point (f = 0), nothing in between
+            const l = Math.pow((1 - Math.cos(2 * Math.PI * f)) / 2, 1.8)   // 0 -> 1 -> 0, a bit longer in the dark part (perceived brightness is not linear)
             v = frame(cycle[k % n], minLevel + (maxLevel - minLevel) * l)
         }
         if (v !== lastFrame) { lastFrame = v; send("multi_intensity", v) }
     }
     Timer {
-        // Nefes başına ~80 kare yeterince akıcı: hızlıda 25 kare/sn, yavaşta daha seyrek (daha az CPU)
+        // ~80 frames per breath is smooth enough: 25 frames/s when fast, fewer when slow (less CPU)
         interval: Math.max(40, Math.min(100, root.period * 1000 / 80))
         repeat: true
         running: root.effectActive && writer.running
         onTriggered: root.tick()
     }
 
-    // Bekleyen (sürükleme sonrası 500 ms) hız/seviye kayıtlarını hemen ayara geçir
+    // Flush pending (500 ms after dragging) speed/level saves into the settings right away
     function flushSaves() {
         if (saveSpeed.running) { saveSpeed.stop(); Settings.setKbd({ speed: speed }) }
         if (saveRange.running) { saveRange.stop(); Settings.setKbd({ min: minLevel, max: maxLevel }) }
     }
-    // Uygulama kapanırken: efekt yarıda kalıp klavye karanlık kalmasın, seçilen sabit renge dön (sonra cb)
+    // On quit: don't leave the keyboard dark in the middle of an effect; go back to the chosen static colour (then cb)
     function restoreForQuit(cb) {
         flushSaves()
         if (!effectActive) { cb(); return }
-        effect = "static"                                   // ayara yazılmaz: açılınca efekt devam eder
+        effect = "static"                                   // not saved: the effect resumes on the next start
         oneShot.go(["sh", "-c", 'printf "%s\\n" "$2" > "$1"', "sh", dir + "/multi_intensity", intensity(color, 1)], () => cb())
     }
 
-    // ---------- yazma izni (kullanıcı isteyince; sistemin şifre penceresiyle) ----------
-    // Kural dosyası uygulamayla gelir (dist/90-ccenter.rules); /etc/udev/rules.d altına eklenir, udev hemen uygular.
+    // ---------- write permission (only when the user asks; via the system password dialog) ----------
+    // The rule file ships with the app (dist/90-ccenter.rules); it goes to /etc/udev/rules.d and udev applies it right away.
     readonly property string ruleFile: Quickshell.shellPath("dist/90-ccenter.rules")
     function grantPermission() {
         permBusy = true
@@ -272,8 +272,8 @@ Singleton {
                 (code, out, err) => root.permDone(code, out, err))
     }
     function revokePermission() {
-        // İzin gidince efekt yazamaz: klavyeyi seçilen sabit renge al ve efekti duraklat; tercih (ayar) korunur,
-        // izin tekrar verilince efekt kaldığı yerden devam eder
+        // Without permission the effect can't write: switch the keyboard to the chosen static colour and pause the effect.
+        // The saved choice is kept, so the effect resumes once permission is granted again.
         if (effectActive) { paused = true; send("multi_intensity", intensity(color, 1)) }
         permBusy = true
         error = ""
@@ -285,29 +285,32 @@ Singleton {
     }
     function permDone(code, out, err) {
         permBusy = false
-        // 126/127: şifre penceresi kapatıldı / yetki verilmedi
-        if (code !== 0) error = code === 126 || code === 127 ? "İşlem iptal edildi." : "Başarısız: " + (err || out).trim().split("\n")[0]
-        // Duraklatmayı yeni izin durumu okunduktan sonra kaldır: izin gittiyse writable=false efekti durdurur,
-        // iptal edildiyse efekt sürer (önce kaldırsak efekt izinsiz yazmaya çalışıp kendini kapatırdı)
+        // 126/127: password dialog dismissed / not authorised
+        if (code !== 0) error = code === 126 || code === 127 ? I18n.t("Cancelled.") : I18n.t("Failed: %1").arg((err || out).trim().split("\n")[0])
+        // Unpause only after the new permission state has been read: if permission is gone, writable=false stops the effect;
+        // if it was cancelled, the effect continues (unpausing earlier would make the effect write without permission and stop itself)
         refresh(() => { root.paused = false })
     }
     Cmd { id: perm }
 
-    // Terminal (IPC) için: "#rrggbb" ve yüzde
+    // For the terminal (IPC): "#rrggbb" and percent
     function hex(c) {
         const h = x => ("0" + Math.round(x * 255).toString(16)).slice(-2)
         return ("#" + h(c.r) + h(c.g) + h(c.b)).toUpperCase()
     }
+    function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or install.sh)") }
     function statusText() {
-        if (!available) return "Klavye ışığı bulunamadı (/sys/class/leds/*::kbd_backlight yok)"
-        const src = { single: "seçilen renk", multi: colors.length + " renk", theme: "Caelestia teması, " + themeCount + " renk" }
-        return "Klavye ışığı: " + name + (rgb ? " (RGB, tek bölge)" : " (tek renk)")
-            + "\nRenk: " + (rgb ? hex(color) : "-")
-            + "\nParlaklık: %" + Math.round(brightness * 100 / maxBrightness)
-            + "\nEfekt: " + (effect === "breathing" ? "nefes (" + src[source] + ", " + period.toFixed(1) + " sn, %"
-                + Math.round(minLevel * 100) + "–%" + Math.round(maxLevel * 100) + ")"
-                : effect === "cycle" ? "renk geçişi (" + src[source] + ", renk başına " + period.toFixed(1) + " sn)" : "sabit")
-            + (writable ? "" : "\nYazma izni yok: uygulamada Klavye > 'İzin ver' (ya da install.sh)")
+        if (!available) return I18n.t("No keyboard light found (no /sys/class/leds/*::kbd_backlight)")
+        const src = { single: I18n.t("chosen color"), multi: I18n.t("%1 colors").arg(colors.length),
+                      theme: I18n.t("Caelestia theme, %1 colors").arg(themeCount) }
+        const fx = effect === "breathing"
+            ? I18n.t("breathing (%1, %2 s, %3%–%4%)").arg(src[source]).arg(I18n.num(period, 1)).arg(Math.round(minLevel * 100)).arg(Math.round(maxLevel * 100))
+            : effect === "cycle" ? I18n.t("color cycle (%1, %2 s per color)").arg(src[source]).arg(I18n.num(period, 1)) : I18n.t("static")
+        return I18n.t("Keyboard light: %1").arg(name) + " (" + (rgb ? I18n.t("RGB, single zone") : I18n.t("single color")) + ")"
+            + "\n" + I18n.t("Color: %1").arg(rgb ? hex(color) : "-")
+            + "\n" + I18n.t("Brightness: %1%").arg(Math.round(brightness * 100 / maxBrightness))
+            + "\n" + I18n.t("Effect: %1").arg(fx)
+            + (writable ? "" : "\n" + noPermissionText())
     }
 
     Cmd { id: reader }

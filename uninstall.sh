@@ -1,6 +1,6 @@
 #!/bin/sh
-# Ccenter'ı kaldırır (install.sh ile kurulanı). Sadece Ccenter'a ait olduğu doğrulanan dosyaları siler.
-# Klavye izni ve ayarlar için ayrıca sorar.
+# Removes Ccenter (as installed by install.sh). Only deletes files verified to belong to Ccenter.
+# Asks separately about the keyboard permission and the settings.
 set -eu
 
 data=${XDG_DATA_HOME:-$HOME/.local/share}
@@ -9,78 +9,91 @@ app=$data/ccenter
 launcher=$app/bin/ccenter
 rule=/etc/udev/rules.d/90-ccenter.rules
 
+# Message language: CCENTER_LANG, else the language chosen in the app (settings.json), else the system locale
+lang=${CCENTER_LANG:-}
+if [ -z "$lang" ]; then
+    grep -q '"lang": *"tr"' "$config/ccenter/settings.json" 2>/dev/null && lang=tr
+    grep -q '"lang": *"en"' "$config/ccenter/settings.json" 2>/dev/null && lang=en
+fi
+[ -n "$lang" ] || case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in tr*) lang=tr ;; *) lang=en ;; esac
+
 say() { printf '%s\n' "$*"; }
+# t "English" "Türkçe": print the line in the chosen language
+t() { if [ "$lang" = tr ]; then say "$2"; else say "$1"; fi; }
+# ask "English question" "Türkçe soru" default(y|n) -> 0 = yes. Accepts y/n and e/h (evet/hayır) in both languages.
 ask() {
-    if [ "$2" = e ]; then hint="[E/h]"; else hint="[e/H]"; fi
-    printf '%s %s ' "$1" "$hint"
+    if [ "$lang" = tr ]; then _q=$2; _h="[E/h]"; [ "$3" = y ] || _h="[e/H]"
+    else _q=$1; _h="[Y/n]"; [ "$3" = y ] || _h="[y/N]"; fi
+    printf '%s %s ' "$_q" "$_h"
     read -r ans || ans=""
     case "$ans" in
         [eEyY]*) return 0 ;;
         [hHnN]*) return 1 ;;
-        *) [ "$2" = e ] ;;
+        *) [ "$3" = y ] ;;
     esac
 }
 
-# Silinecekler: yalnızca Ccenter'a ait olanlar (menü kaydı/servis bizim uygulama yolunu içeriyorsa,
-# terminal komutu bizim uygulamaya bağlantıysa)
+# To delete: only Ccenter's own files (launcher entry/service if they contain our app path,
+# the terminal command if it links to our app)
 files=""
 for f in "$data/applications/ccenter.desktop" "$data/systemd/user/ccenter.service" "$config/systemd/user/ccenter.service"; do
     [ -f "$f" ] && grep -q "$app" "$f" && files="$files $f"
 done
 [ -L "$HOME/.local/bin/ccenter" ] && [ "$(readlink -f "$HOME/.local/bin/ccenter")" = "$launcher" ] && files="$files $HOME/.local/bin/ccenter"
 
-say "Ccenter kaldırılıyor"
+t "Removing Ccenter" "Ccenter kaldırılıyor"
 say "===================="
 if [ ! -d "$app" ] && [ -z "$files" ]; then
-    say "Kurulu bir Ccenter bulunamadı ($app yok)."
+    t "No installed Ccenter found ($app does not exist)." "Kurulu bir Ccenter bulunamadı ($app yok)."
 else
-    say "Silinecekler:"
+    t "Will be deleted:" "Silinecekler:"
     [ -d "$app" ] && say "  $app/"
     for f in $files; do say "  $f"; done
-    ask "Devam edilsin mi?" e || { say "İptal edildi, hiçbir şey değişmedi."; exit 0; }
+    ask "Continue?" "Devam edilsin mi?" y || { t "Cancelled, nothing changed." "İptal edildi, hiçbir şey değişmedi."; exit 0; }
 
-    # Çalışıyorsa düzgün kapat (klavye efekti sabit renge, fanlar NBFC'ye döner)
+    # If it's running, quit it cleanly (keyboard effect to the static colour, fans back to NBFC)
     if qs list --all 2>/dev/null | grep -q "$app/shell.qml"; then
-        say "Çalışan Ccenter kapatılıyor…"
+        t "Quitting the running Ccenter…" "Çalışan Ccenter kapatılıyor…"
         qs ipc -p "$app" call cc quit >/dev/null 2>&1 || true
         sleep 2
     fi
-    # Arka plan servisi açıksa kapat
+    # Disable the background service if enabled
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user disable --now ccenter.service >/dev/null 2>&1 || true
     fi
     rm -rf "$app"
     for f in $files; do rm -f "$f"; done
     command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload 2>/dev/null || true
-    say "Uygulama kaldırıldı."
+    t "App removed." "Uygulama kaldırıldı."
 fi
 
-# Klavye ışığı izni
+# Keyboard light permission
 if [ -f "$rule" ]; then
     say ""
-    say "Klavye ışığı izni ($rule) duruyor."
-    if ask "Bu izin de kaldırılsın mı? (yönetici şifresi istenecek)" e; then
+    t "The keyboard light permission ($rule) is still there." "Klavye ışığı izni ($rule) duruyor."
+    if ask "Remove this permission too? (asks for the admin password)" "Bu izin de kaldırılsın mı? (yönetici şifresi istenecek)" y; then
         if sudo rm -f "$rule" && sudo udevadm control --reload-rules; then
             for f in /sys/class/leds/*::kbd_backlight/brightness /sys/class/leds/*::kbd_backlight/multi_intensity; do
                 [ -e "$f" ] && sudo chmod 0644 "$f"
             done
-            say "Klavye izni kaldırıldı (ışık dosyaları yine sadece root tarafından yazılabilir)."
+            t "Keyboard permission removed (the light files are writable only by root again)." \
+              "Klavye izni kaldırıldı (ışık dosyaları yine sadece root tarafından yazılabilir)."
         else
-            say "Kaldırılamadı. Elle: sudo rm $rule"
+            t "Could not remove it. By hand: sudo rm $rule" "Kaldırılamadı. Elle: sudo rm $rule"
         fi
     fi
 fi
 
-# Ayarlar
+# Settings
 cfg=$config/ccenter
 if [ -d "$cfg" ]; then
     say ""
-    if ask "Ayarların ($cfg: fan profilleri, eğriler, klavye) da silinsin mi?" h; then
+    if ask "Delete your settings too ($cfg: fan profiles, curves, keyboard)?" "Ayarların ($cfg: fan profilleri, eğriler, klavye) da silinsin mi?" n; then
         rm -rf "$cfg"
-        say "Ayarlar silindi."
+        t "Settings deleted." "Ayarlar silindi."
     else
-        say "Ayarlar duruyor; tekrar kurarsan kaldığın yerden devam eder."
+        t "Settings kept; if you install again you continue where you left off." "Ayarlar duruyor; tekrar kurarsan kaldığın yerden devam eder."
     fi
 fi
 say ""
-say "Tamam."
+t "Done." "Tamam."

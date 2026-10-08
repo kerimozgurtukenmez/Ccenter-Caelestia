@@ -1,7 +1,7 @@
 import QtQuick
 import qs.services
 
-// Yuvarlak +/- butonu. Basılı tutunca tekrarlar.
+// Round +/- button. Repeats while held down.
 Rectangle {
     id: b
     property string icon

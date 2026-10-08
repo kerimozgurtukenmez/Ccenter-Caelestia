@@ -23,9 +23,9 @@ Rectangle {
 
         StyledText {
             visible: card.title !== ""
-            text: card.title
+            text: I18n.upper(card.title)     // not Font.AllUppercase: that follows the system locale (Turkish i -> I instead of İ)
             color: Colours.fgDim
-            font { pixelSize: 11; bold: true; letterSpacing: 1.2; capitalization: Font.AllUppercase }
+            font { pixelSize: 11; bold: true; letterSpacing: 1.2 }
         }
     }
 }

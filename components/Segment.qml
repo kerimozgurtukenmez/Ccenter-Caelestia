@@ -6,8 +6,8 @@ Rectangle {
     id: seg
     property var model: []
     property int current: 0
-    property bool controlled: false   // true: tıklayınca kendi kendine değişmez, current dışarıdan bağlanır
-    signal picked(int i)              // sadece kullanıcı tıklayınca
+    property bool controlled: false   // true: a click doesn't change `current` by itself; bind `current` from outside
+    signal picked(int i)              // only when the user clicks
 
     Layout.fillWidth: true
     implicitHeight: 36

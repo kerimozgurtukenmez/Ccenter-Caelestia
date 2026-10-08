@@ -3,22 +3,22 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Bildirimler: kritik sıcaklık, servis durdu, fan komutu başarısız, maksimum fan bitti, kısayolla profil değişimi
+// Notifications: critical temperature, service stopped, fan command failed, max fan ended, profile changed by keybind
 Card {
-    title: "Bildirimler"
+    title: I18n.t("Notifications")
 
     ToggleRow {
         icon: "notifications"
-        label: "Bildirimler"
-        sub: "Kritik sıcaklık, NBFC servisi durdu, fan hızı ayarlanamadı, maksimum fan bitti"
+        label: I18n.t("Notifications")
+        sub: I18n.t("Critical temperature, NBFC service stopped, fan speed could not be set, max fan ended")
         controlled: true
         checked: Notify.enabled
         onToggled: v => Settings.setNotify("enabled", v)
     }
     ToggleRow {
         icon: "tune"
-        label: "Profil değişince bildir"
-        sub: "Terminalden ya da klavye kısayolundan profil değiştirildiğinde"
+        label: I18n.t("Notify on profile change")
+        sub: I18n.t("When the profile is changed from the terminal or a keybind")
         controlled: true
         checked: Notify.profiles
         enabled: Notify.enabled
@@ -28,9 +28,9 @@ Card {
     Btn {
         Layout.fillWidth: true
         icon: "send"
-        text: "Deneme bildirimi gönder"
+        text: I18n.t("Send a test notification")
         enabled: Notify.enabled
         opacity: enabled ? 1 : 0.4
-        onClicked: Notify.send("Ccenter", "Bildirimler çalışıyor.", "normal", "dialog-information")
+        onClicked: Notify.send("Ccenter", I18n.t("Notifications work."), "normal", "dialog-information")
     }
 }
