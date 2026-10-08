@@ -31,6 +31,9 @@ Kullanım: ccenter [komut]
   profiles           Profilleri listele (* = aktif)
   profile <ad>       Profil uygula (büyük/küçük harf fark etmez)
   boost <dk>         Maksimum fan: dakika, 0 = kapat, -1 = süresiz
+  kbd                Klavye ışığı durumu
+  kbd color <#hex>   Klavye rengi (ör. kbd color "#ff0000")
+  kbd brightness <%> Klavye parlaklığı 0-100
   quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner)
   --help | --version
 EOF
@@ -75,6 +78,14 @@ case "${1:-}" in
     boost)
         [ $# -ge 2 ] || { echo "Kullanım: ccenter boost <dakika>" >&2; exit 2; }
         need_running; ipc boost -- "$2" ;;
+    kbd)
+        need_running
+        case "${2:-}" in
+            "") ipc kbd ;;
+            color) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd color <#rrggbb>" >&2; exit 2; }; ipc kbdColor "$3" ;;
+            brightness) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd brightness <0-100>" >&2; exit 2; }; ipc kbdBrightness -- "$3" ;;
+            *) echo "Kullanım: ccenter kbd [color <#hex> | brightness <0-100>]" >&2; exit 2 ;;
+        esac ;;
     -h|--help|help)
         usage ;;
     -V|--version)

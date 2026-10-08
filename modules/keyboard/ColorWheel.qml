@@ -29,6 +29,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
+        preventStealing: true             // sürüklerken sayfa kaymasın
         cursorShape: Qt.CrossCursor
         function pick(m) {
             const r = width / 2

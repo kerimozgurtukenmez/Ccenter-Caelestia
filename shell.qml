@@ -47,7 +47,7 @@ ShellRoot {
                         active: root.tab === 0; onClicked: root.tab = 0
                     }
                     NavButton {
-                        icon: "keyboard"; label: "Klavye"; sub: "RGB · ışık modları"
+                        icon: "keyboard"; label: "Klavye"; sub: "RGB · renk ve parlaklık"
                         active: root.tab === 1; onClicked: root.tab = 1
                     }
                 }
@@ -109,6 +109,19 @@ ShellRoot {
             return minutes === 0 ? "Maksimum fan kapatıldı" : "Maksimum fan açık" + (minutes > 0 ? " (" + minutes + " dk)" : " (süresiz)")
         }
         function profiles(): string { return FanState.profileList() }
+        // Klavye ışığı: renk "#rrggbb", parlaklık yüzde (0-100)
+        function kbd(): string { return Keyboard.statusText() }
+        function kbdColor(hex: string): string {
+            if (!Keyboard.rgb) return "Bu klavye ışığı RGB değil"
+            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return "Renk #rrggbb biçiminde olmalı (ör. #ff0000)"
+            Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)
+            return Keyboard.writable ? "Renk: " + Keyboard.hex(Keyboard.color) : "Yazma izni yok: kurulum gerekli (sudo make install)"
+        }
+        function kbdBrightness(percent: int): string {
+            if (!Keyboard.available) return "Klavye ışığı bulunamadı"
+            Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
+            return Keyboard.writable ? "Parlaklık: %" + Math.max(0, Math.min(100, percent)) : "Yazma izni yok: kurulum gerekli (sudo make install)"
+        }
         function status(): string { return FanState.statusText() }
     }
 }
