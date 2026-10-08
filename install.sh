@@ -108,6 +108,31 @@ else
                   "$bindir yazılamıyor (sahibi: $_o); terminal komutu bağlantısı atlanacak.")
 fi
 
+# Short 'ccenter' command: ~/.local/bin is not in PATH everywhere (e.g. bash on Arch doesn't add it). If the command's
+# folder is missing from the PATH of the terminal running this script, offer to add it to the shells' startup files.
+# The added lines sit between markers, so uninstall.sh can remove exactly them.
+cmddir=$bindir; [ -n "$link" ] || cmddir=$app/bin
+mark_begin="# >>> ccenter >>>"
+mark_end="# <<< ccenter <<<"
+in_path() { case ":$PATH:" in *":$1:"*) return 0 ;; esac; return 1; }
+writable_file() { if [ -e "$1" ]; then [ -w "$1" ]; else can_write "$(dirname "$1")"; fi; }
+rcfiles=""; fishconf=""; path_done=""          # path_done: an earlier install already added the block
+if ! in_path "$cmddir"; then
+    # bash / zsh: if the shell is in use (its startup file exists or it is the login shell) and our lines aren't there yet
+    for _rc in "$HOME/.bashrc:bash" "$HOME/.zshrc:zsh"; do
+        _f=${_rc%%:*}; _sh=${_rc##*:}
+        if [ -f "$_f" ] || [ "${SHELL##*/}" = "$_sh" ]; then
+            if grep -qF "$mark_begin" "$_f" 2>/dev/null; then path_done=1
+            elif writable_file "$_f"; then rcfiles="$rcfiles $_f"; fi
+        fi
+    done
+    # fish: a separate drop-in file in conf.d (config.fish is not touched), unless fish already has the folder in PATH
+    _fc=$config/fish/conf.d/ccenter.fish
+    if command -v fish >/dev/null 2>&1 && [ -d "$config/fish" ] && ! fish -c "contains -- '$cmddir' \$PATH" </dev/null >/dev/null 2>&1; then
+        if [ ! -e "$_fc" ] || grep -qF "$mark_begin" "$_fc"; then writable_file "$_fc" && fishconf=$_fc; fi
+    fi
+fi
+
 t "Will be installed (all in your home folder, no admin password needed):" "Kurulacaklar (hepsi senin kullanıcı klasöründe, yönetici şifresi gerekmez):"
 t "  $app/   app, command and icon" "  $app/   uygulama, komut ve ikon"
 if [ -n "$desktop" ]; then t "  $desktop   app menu entry" "  $desktop   uygulama menüsü kaydı"
@@ -141,6 +166,37 @@ if [ -n "$link" ]; then
 fi
 t "App installed." "Uygulama kuruldu."
 say ""
+
+# ---------- short 'ccenter' command (optional) ----------
+path_added=""
+if [ -n "$rcfiles$fishconf" ]; then
+    t "Short 'ccenter' command" "Kısa 'ccenter' komutu"
+    say "-----------------------"
+    t "$cmddir is not in your terminal's PATH, so typing 'ccenter' would say 'command not found'." \
+      "$cmddir terminalinin PATH'inde değil; 'ccenter' yazınca 'command not found' der."
+    t "Ccenter can add it with a short block (between '$mark_begin' lines) to:" \
+      "Ccenter bunu şu dosyalara kısa bir blokla ('$mark_begin' satırları arasında) ekleyebilir:"
+    for _f in $rcfiles $fishconf; do say "  $_f"; done
+    t "Nothing else in these files is changed. Undo: ./uninstall.sh removes exactly this block." \
+      "Bu dosyalarda başka hiçbir şey değişmez. Geri alma: ./uninstall.sh tam olarak bu bloğu siler."
+    if ask "Add it?" "Eklensin mi?" y; then
+        for _f in $rcfiles; do
+            # make sure the block starts on its own line
+            if [ -s "$_f" ] && [ -n "$(tail -c1 "$_f")" ]; then printf '\n' >> "$_f"; fi
+            printf '%s\n%s\n%s\n' "$mark_begin" \
+                "case \":\$PATH:\" in *\":$cmddir:\"*) ;; *) export PATH=\"$cmddir:\$PATH\" ;; esac" "$mark_end" >> "$_f"
+        done
+        if [ -n "$fishconf" ]; then
+            mkdir -p "$(dirname "$fishconf")"
+            printf '%s\nfish_add_path -g %s\n%s\n' "$mark_begin" "$cmddir" "$mark_end" > "$fishconf"
+        fi
+        path_added=1
+        t "Added. Works in newly opened terminals." "Eklendi. Yeni açtığın terminallerde çalışır."
+    else
+        t "Not added. You can always use the full path: $launcher" "Eklenmedi. Tam yolu her zaman kullanabilirsin: $launcher"
+    fi
+    say ""
+fi
 
 # ---------- keyboard light permission (optional) ----------
 led=""
@@ -193,10 +249,11 @@ fi
 say ""
 t "Install complete." "Kurulum tamam."
 [ -n "$desktop" ] && t "  To start: 'Ccenter' in the app menu" "  Başlatmak: uygulama menüsünden 'Ccenter'"
-if [ -n "$link" ] && case ":$PATH:" in *":$bindir:"*) true ;; *) false ;; esac; then
+if [ -n "$path_added$path_done" ]; then
+    t "  Terminal: ccenter   (in newly opened terminals)" "  Terminal: ccenter   (yeni açtığın terminallerde)"
+elif in_path "$cmddir"; then
     say "  Terminal: ccenter"
 else
-    t "  Terminal: $launcher   (for the short 'ccenter' command, add this folder to PATH: $app/bin)" \
-      "  Terminal: $launcher   (kısa 'ccenter' komutu için bu klasörü PATH'e ekleyebilirsin: $app/bin)"
+    t "  Terminal: $launcher" "  Terminal: $launcher"
 fi
 t "  To remove: ./uninstall.sh" "  Kaldırmak: ./uninstall.sh"
