@@ -1,6 +1,6 @@
-# Ccenter arka plan servisi (systemd kullanıcı servisi).
+# Ccenter arka plan servisi (systemd kullanıcı servisi), make install ile /usr/lib/systemd/user altına kurulur.
 # Uygulamadaki "Oturum açılınca arka planda başlat" anahtarı bunu etkinleştirir/devre dışı bırakır.
-# Elle: systemctl --user enable --now <bu dosyanın tam yolu>   |   kapatmak: systemctl --user disable --now ccenter.service
+# Elle: systemctl --user enable --now ccenter.service   |   kapatmak: systemctl --user disable --now ccenter.service
 [Unit]
 Description=Ccenter - fan ve klavye kontrol merkezi (arka plan)
 PartOf=graphical-session.target
@@ -8,9 +8,8 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-# Pencere açılmadan başlar; açmak için: qs -c Ccenter ipc call cc open
-Environment=CCENTER_BACKGROUND=1
-ExecStart=/usr/bin/qs -c Ccenter -n
+# Pencere açılmadan başlar; açmak için: ccenter
+ExecStart=/usr/bin/ccenter --background
 # Servis durunca (ya da çökerse) fanlar NBFC'nin otomatik kontrolüne döner
 ExecStopPost=-/usr/bin/nbfc set -a
 Restart=on-failure

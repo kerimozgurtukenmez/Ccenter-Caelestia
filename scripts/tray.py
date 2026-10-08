@@ -19,8 +19,9 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
-ICON_FILE = sys.argv[1] if len(sys.argv) > 1 else ""
-FALLBACK_ICON = "preferences-system"
+# İkon: sırayla denenen resim dosyaları (ör. kullanıcı resmi, uygulama ikonu); hiçbiri olmazsa tema ikonu
+ICON_FILES = sys.argv[1:]
+FALLBACK_ICON = "ccenter"
 
 SNI_XML = """
 <node>
@@ -150,7 +151,7 @@ def load_pixmap(path):
     return out
 
 
-PIXMAP = load_pixmap(ICON_FILE)
+PIXMAP = next((p for p in map(load_pixmap, ICON_FILES) if p), [])
 # Sabit özellikler bir kez hazırlanır: ikon verisini her istekte yeniden çevirmek pahalı (~20 KB, bayt bayt)
 STATIC_PROPS = {
     "Category": GLib.Variant("s", "Hardware"),
