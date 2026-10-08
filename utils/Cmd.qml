@@ -1,11 +1,11 @@
 import Quickshell.Io
 import QtQuick
 
-// Tek seferlik komut çalıştırır: go(["cmd", "arg"], (code, stdout, stderr) => { ... })
+// Runs a one-off command: go(["cmd", "arg"], (code, stdout, stderr) => { ... })
 Process {
     id: p
     property var done: null
-    // running, `running = true` atamasından hemen sonra true olmayabiliyor; meşguliyet için bunu kullan
+    // `running` may not be true right after `running = true`; use this to know whether it is busy
     property bool busy: false
     property int code: -1
     property bool gotExit: false

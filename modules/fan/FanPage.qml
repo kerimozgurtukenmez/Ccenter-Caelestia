@@ -10,7 +10,7 @@ Flickable {
     contentHeight: col.implicitHeight
     boundsBehavior: Flickable.StopAtBounds
 
-    // Sadece görünüm: fan ayarları, profiller ve geri yükleme services/FanState.qml'de
+    // View only: fan settings, profiles and restoring live in services/FanState.qml
     ColumnLayout {
         id: col
         width: page.width
@@ -21,7 +21,7 @@ Flickable {
         ServiceCard {}
         ConfigCard {}
 
-        // Servis durmuşken ya da salt-okunur modda fan ayarları kilitli
+        // Fan settings are locked while the service is stopped or in read-only mode
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 12
@@ -34,7 +34,7 @@ Flickable {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "Fan bilgisi yok. Servis çalışmıyor ya da config seçilmemiş olabilir."
+                text: I18n.t("No fan information. The service may not be running or no config is selected.")
                 color: Colours.fgDim
                 font.pixelSize: 12
             }
@@ -54,7 +54,7 @@ Flickable {
                     FanCard {
                         Layout.alignment: Qt.AlignTop
                         fanIndex: index
-                        name: "Fan " + (index + 1)
+                        name: I18n.t("Fan %1").arg(index + 1)
                         subtitle: info ? info.name : ""
                         info: Nbfc.fans[index]
                         active: !FanState.globalOn
@@ -66,7 +66,7 @@ Flickable {
                 visible: Nbfc.fans.length > 0
                 isGlobal: true
                 name: "Global"
-                subtitle: "Açıkken tüm fanlara aynı değerler yazılır"
+                subtitle: I18n.t("When on, the same settings are written to every fan")
             }
         }
 

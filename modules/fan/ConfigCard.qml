@@ -24,7 +24,7 @@ Card {
         function onConfigIdChanged() { cfg.picked = "" }
     }
 
-    // Başlık satırı: tıkla -> listeyi aç/kapat
+    // Header row: click -> open/close the list
     Item {
         Layout.fillWidth: true
         implicitHeight: 48
@@ -37,13 +37,13 @@ Card {
                 spacing: 0
                 StyledText {
                     Layout.fillWidth: true
-                    text: Nbfc.configId !== "" ? Nbfc.configId : "Config seçilmedi"
+                    text: Nbfc.configId !== "" ? Nbfc.configId : I18n.t("No config selected")
                     elide: Text.ElideRight
                     color: Colours.fg
                     font { pixelSize: 15; bold: true }
                 }
                 StyledText {
-                    text: Nbfc.fans.length > 0 ? Nbfc.fans.length + " fan bulundu" : "Fan bilgisi yok"
+                    text: Nbfc.fans.length > 0 ? I18n.t("%1 fans found").arg(Nbfc.fans.length) : I18n.t("No fan information")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
@@ -80,7 +80,7 @@ Card {
                 visible: search.text === ""
                 x: 44
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Config ara…"
+                text: I18n.t("Search configs…")
                 color: Colours.fgDim
                 font.pixelSize: 13
             }
@@ -129,7 +129,7 @@ Card {
                     spacing: 8
                     StyledText {
                         visible: Nbfc.recommended.indexOf(modelData) >= 0
-                        text: "önerilen"
+                        text: I18n.t("recommended")
                         color: chosen ? Colours.fgOnPrimary : Colours.fgDim
                         font.pixelSize: 11
                     }
@@ -150,12 +150,12 @@ Card {
             spacing: 8
             Btn {
                 Layout.fillWidth: true; Layout.preferredWidth: 1
-                icon: "auto_awesome"; text: "Önerileni bul"
+                icon: "auto_awesome"; text: I18n.t("Find recommended")
                 onClicked: Nbfc.recommend()
             }
             Btn {
                 Layout.fillWidth: true; Layout.preferredWidth: 1
-                filled: true; icon: "check"; text: "Uygula"
+                filled: true; icon: "check"; text: I18n.t("Apply")
                 enabled: cfg.sel !== "" && cfg.sel !== Nbfc.configId
                 opacity: enabled ? 1 : 0.4
                 onClicked: Nbfc.applyConfig(cfg.sel)
@@ -166,7 +166,7 @@ Card {
             wrapMode: Text.WordWrap
             color: Colours.fgDim
             font.pixelSize: 11
-            text: "Uygulamak servisi yeniden başlatır ve yönetici izni ister. Uyumsuz bir config fanları yanlış sürebilir; önce salt-okunur modda dene."
+            text: I18n.t("Applying restarts the service and asks for admin permission. An incompatible config can drive the fans wrongly; try it in read-only mode first.")
         }
     }
 }

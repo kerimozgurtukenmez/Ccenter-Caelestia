@@ -4,7 +4,7 @@ import qs.components
 import qs.services
 
 Card {
-    title: "Donanım ve sıcaklıklar"
+    title: I18n.t("Hardware and temperatures")
 
     GridLayout {
         Layout.fillWidth: true
@@ -64,7 +64,7 @@ Card {
     }
     StyledText {
         visible: Sensors.readings.length === 0
-        text: "Sensör okunamadı"
+        text: I18n.t("Could not read the sensors")
         color: Colours.fgDim
         font.pixelSize: 12
     }

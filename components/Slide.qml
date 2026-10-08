@@ -7,7 +7,7 @@ Item {
     property bool vertical: false
     property color accent: Colours.primary
     readonly property real thick: Math.min(width, height)
-    signal moved(real v)              // sadece kullanıcı sürüklerken
+    signal moved(real v)              // only while the user drags
 
     implicitWidth: vertical ? 24 : 200
     implicitHeight: vertical ? 90 : 24

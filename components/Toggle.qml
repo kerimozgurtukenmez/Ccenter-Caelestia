@@ -4,7 +4,7 @@ import qs.services
 Rectangle {
     id: t
     property bool checked: false
-    property bool controlled: false   // true: tıklayınca kendi kendine değişmez, durumu dışarıdan bağla
+    property bool controlled: false   // true: a click doesn't flip `checked` by itself; bind the state from outside
     signal toggled(bool v)
 
     implicitWidth: 48

@@ -9,28 +9,28 @@ Card {
     property string subtitle: ""
     property bool isGlobal: false
     property int fanIndex: 0
-    property bool active: true               // global açıkken tekil kartlar false olur
-    property var info: null                  // Nbfc.fans[i] (global kartta null)
-    // Kart FanState'in görünümüdür: ayar oradan gelir, değişiklik oraya gider (pencere kapanınca kart silinir)
+    property bool active: true               // false on the per-fan cards while Global is on
+    property var info: null                  // Nbfc.fans[i] (null on the Global card)
+    // The card is a view of FanState: settings come from there, changes go there (the card is destroyed with the window)
     readonly property var source: isGlobal ? FanState.globalSt : (FanState.fanSt[fanIndex] ?? FanState.autoSt)
     property int mode: 0
     property bool smoothCurve: true
-    property string src: "cpu"               // Eğri modunda bakılan sıcaklık: cpu | gpu | max
+    property string src: "cpu"               // temperature followed in Curve mode: cpu | gpu | max
     readonly property var srcKeys: ["cpu", "gpu", "max"]
-    property int hyst: 3                     // Eğri: yavaşlamadan önce sıcaklığın inmesi gereken derece
+    property int hyst: 3                     // Curve: how many degrees the temperature must drop before slowing down
     property var curve: [{ t: 45, s: 20 }, { t: 55, s: 40 }, { t: 65, s: 60 }, { t: 75, s: 80 }, { t: 85, s: 100 }]
     readonly property bool allowed: isGlobal ? FanState.globalOn : active
-    // mode: 0 Otomatik, 1 Sabit, 2 Eğri
+    // mode: 0 Auto, 1 Fixed, 2 Curve
     readonly property var st: ({ mode: fan.mode, fixed: fixedRow.value, curve: fan.curve, smooth: fan.smoothCurve, src: fan.src, hyst: fan.hyst })
 
-    // Kullanıcı bir şeyi değiştirdi: 400 ms bekleyip bir kez FanState'e yaz
+    // The user changed something: wait 400 ms, then write it to FanState once
     function touch() { debounce.restart() }
     Timer {
         id: debounce
         interval: 400
         onTriggered: fan.isGlobal ? FanState.setGlobal(fan.st) : FanState.setFan(fan.fanIndex, fan.st)
     }
-    // FanState değişince (açılış, profil, terminal) kartı ona eşitle
+    // When FanState changes (startup, profile, terminal), sync the card to it
     function sync() {
         const s = source
         if (!s) return
@@ -42,7 +42,7 @@ Card {
         mode = s.mode
     }
     onSourceChanged: if (!debounce.running) sync()
-    // Pencere kapanınca kart silinir: bekleyen (400 ms) değişiklik kaybolmasın, hemen FanState'e yaz
+    // The card is destroyed when the window closes: don't lose a pending (400 ms) change, write it to FanState now
     Component.onDestruction: if (debounce.running) {
         debounce.stop()
         fan.isGlobal ? FanState.setGlobal(fan.st) : FanState.setFan(fan.fanIndex, fan.st)
@@ -68,7 +68,7 @@ Card {
                 color: Colours.primary
                 font { pixelSize: 13; bold: true }
             }
-            // Gerçek RPM: sadece sürücü güvenilir değer veriyorsa (bazı modellerde hep 0)
+            // Real RPM: only if the driver reports trustworthy values (always 0 on some models)
             StyledText {
                 readonly property real rpm: Sensors.rpm(fan.fanIndex)
                 visible: isFinite(rpm)
@@ -94,21 +94,21 @@ Card {
         Behavior on opacity { Anim {} }
 
         Segment {
-            model: ["Otomatik", "Sabit", "Eğri"]
+            model: [I18n.t("Auto"), I18n.t("Fixed"), I18n.t("Curve")]
             controlled: true
             current: fan.mode
             onPicked: i => { fan.mode = i; fan.touch() }
         }
 
-        // Otomatik: NBFC config'inin eğrisi (salt okunur) + kendi eğrine kopyala
+        // Auto: the NBFC config's own curve (read-only) + copy it into your own curve
         readonly property var cfgCurve: Nbfc.configCurves[fan.isGlobal ? 0 : fan.fanIndex] ?? null
         StyledText {
             visible: fan.mode === 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: parent.cfgCurve
-                ? "NBFC config'inin eğrisi kullanılır" + (fan.isGlobal ? " (Fan 1'inki gösteriliyor)" : "") + " · yavaşlama ~" + parent.cfgCurve.hyst + "°C"
-                : (Nbfc.configCurves.length > 0 ? "Config eşik tablosu tanımlamıyor; NBFC kendi varsayılanını kullanır." : "Config'teki hazır eğri kullanılır.")
+                ? I18n.t("Uses the NBFC config's curve") + (fan.isGlobal ? " " + I18n.t("(showing Fan 1's)") : "") + " · " + I18n.t("slow-down ~%1°C").arg(parent.cfgCurve.hyst)
+                : (Nbfc.configCurves.length > 0 ? I18n.t("The config defines no threshold table; NBFC uses its own default.") : I18n.t("Uses the curve from the config."))
             color: Colours.fgDim
             font.pixelSize: 11
         }
@@ -124,7 +124,7 @@ Card {
             visible: fan.mode === 0 && parent.cfgCurve !== null
             Layout.fillWidth: true
             icon: "edit"
-            text: "Bu eğriyi düzenle"
+            text: I18n.t("Edit this curve")
             onClicked: {
                 const c = parent.cfgCurve
                 fan.curve = c.points.map(p => ({ t: p.t, s: p.s }))
@@ -139,21 +139,21 @@ Card {
         SliderRow {
             id: fixedRow
             visible: fan.mode === 1
-            label: "Sabit hız"
+            label: I18n.t("Fixed speed")
             value: 0.5
             readout: Math.round(value * 100) + "%"
             onMoved: fan.touch()
         }
 
-        // Sıcaklık kaynağı (sadece harici GPU varsa anlamlı)
+        // Temperature source (only meaningful with a discrete GPU)
         RowLayout {
             visible: fan.mode === 2 && Sensors.hasGpu
             Layout.fillWidth: true
             spacing: 10
-            StyledText { text: "Sıcaklık"; color: Colours.fgDim; font.pixelSize: 12 }
+            StyledText { text: I18n.t("Temperature"); color: Colours.fgDim; font.pixelSize: 12 }
             Segment {
                 controlled: true
-                model: ["CPU", "GPU", "En yüksek"]
+                model: ["CPU", "GPU", I18n.t("Hottest")]
                 current: Math.max(0, fan.srcKeys.indexOf(fan.src))
                 onPicked: i => { fan.src = fan.srcKeys[i]; fan.touch() }
             }
@@ -172,7 +172,7 @@ Card {
         Stepper {
             visible: fan.mode === 2
             Layout.fillWidth: true
-            label: "Yavaşlama gecikmesi"
+            label: I18n.t("Slow-down delay")
             value: fan.hyst
             from: 0
             to: 10

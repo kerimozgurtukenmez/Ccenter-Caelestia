@@ -1,7 +1,7 @@
 import QtQuick
 import qs.services
 
-// Caelestia fontu ve rengiyle metin
+// Text with Caelestia's font and colour
 Text {
     color: Colours.fg
     font.family: Colours.fontFamily

@@ -5,14 +5,14 @@ import QtQuick
 import Caelestia.Config
 import Caelestia.Images
 
-// Renkler Caelestia'dan gelir, Caelestia dosyalarına hiçbir şey yazılmaz (sadece okunur):
-//  - ~/.local/state/caelestia/scheme.json  -> renk şeması
-//  - Tokens.transparency (shell.json)       -> şeffaflık; pencere yarı saydam olunca Hyprland blur'u uygular
-//  - wallpaper/path.txt                     -> duvar kağıdı parlaklığı (katman renklerini Caelestia gibi ayarlamak için)
+// Colours come from Caelestia; nothing is ever written to Caelestia's files (read-only):
+//  - ~/.local/state/caelestia/scheme.json  -> colour scheme
+//  - Tokens.transparency (shell.json)       -> transparency; a translucent window gets Hyprland's blur
+//  - wallpaper/path.txt                     -> wallpaper luminance (to tint the layers like Caelestia does)
 Singleton {
     id: root
 
-    // Şemadan gelen ham renkler (yoksa varsayılanlar)
+    // Raw colours from the scheme (defaults until it is loaded)
     QtObject {
         id: raw
         property color surface: "#141218"
@@ -30,7 +30,7 @@ Singleton {
     property color tertiary: "#efb8c8"
     property color secondary: "#ccc2dc"
     property color sky: "#89dceb"
-    // Temanın vurgu renkleri (duvar kağıdına göre renklendirilmiş; klavye efektleri için renk havuzu)
+    // The theme's accent colours (tinted to the wallpaper); colour pool for keyboard effects
     property var accents: []
     readonly property var accentKeys: ["mauve", "pink", "red", "maroon", "peach", "yellow", "green", "teal",
                                        "sky", "sapphire", "blue", "lavender", "flamingo", "rosewater"]
@@ -38,12 +38,12 @@ Singleton {
     readonly property string iconFont: "Material Symbols Rounded"
     readonly property string fontFamily: Tokens.font.body.small.family
 
-    // Arka planlar şeffaflık katmanından geçer: pencere (0) < kart (1) < kart içi (2)
+    // Backgrounds go through the transparency layers: window (0) < card (1) < inside a card (2)
     readonly property color surface: layer(raw.surface, 0)
     readonly property color surfaceContainer: layer(raw.surfaceContainer, 1)
     readonly property color surfaceHigh: layer(raw.surfaceContainerHigh, 2)
 
-    // ---------- Caelestia şeffaflığı (services/Colours.qml ile aynı hesap) ----------
+    // ---------- Caelestia transparency (same maths as Caelestia's services/Colours.qml, adapted; GPL-3.0) ----------
     readonly property bool trEnabled: Tokens.transparency.enabled
     readonly property real trBase: Math.max(0, Math.min(1, Tokens.transparency.base - (light ? 0.1 : 0)))
     readonly property real trLayers: Math.max(0, Math.min(1, Tokens.transparency.layers))
@@ -66,7 +66,7 @@ Singleton {
         return layer === 0 ? Qt.alpha(c, trBase) : alter(c, trLayers, layer ?? 1)
     }
 
-    // property adı -> scheme.json'daki anahtar (olmayan anahtar atlanır, varsayılan kalır)
+    // property name -> key in scheme.json (missing keys are skipped and keep the default)
     readonly property var keys: ({
         primary: "primary", fgOnPrimary: "onPrimary", fg: "onSurface", fgDim: "onSurfaceVariant",
         outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", secondary: "secondary", sky: "sky"
@@ -102,7 +102,7 @@ Singleton {
     }
     property string wallpaper: ""
 
-    // Video duvar kağıdı analiz edilemez; Caelestia'da da parlaklık bu durumda 0 kalır
+    // A video wallpaper can't be analysed; Caelestia keeps the luminance at 0 in that case as well
     readonly property bool wallIsImage: root.wallpaper !== "" && !/\.(mp4|mkv|webm|avi|mov)$/i.test(root.wallpaper)
     readonly property real wallLuminanceSafe: wallIsImage ? analyser.luminance : 0
 

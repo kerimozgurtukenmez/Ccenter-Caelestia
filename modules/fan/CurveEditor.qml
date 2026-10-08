@@ -3,13 +3,13 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Sıcaklık -> fan hızı eğrisi. Noktalar [{ t: °C, s: % }] ve sıcaklığa göre sıralı.
+// Temperature -> fan speed curve. Points [{ t: °C, s: % }], sorted by temperature.
 ColumnLayout {
     id: ed
     property var points: []
     property bool smoothCurve: true
     property real liveTemp: NaN
-    property bool readOnly: false            // sadece göster (config eğrisi önizlemesi)
+    property bool readOnly: false            // display only (preview of the config's curve)
     property int selected: 0
     readonly property int tMin: 30
     readonly property int tMax: 100
@@ -38,7 +38,7 @@ ColumnLayout {
         a[i] = { t: t, s: s }
         edited(a)
     }
-    // En geniş boşluğun ortasına yeni nokta ekler
+    // Adds a new point in the middle of the widest gap
     function add() {
         if (points.length >= 12) return
         const a = copy()
@@ -68,7 +68,7 @@ ColumnLayout {
         edited([{ t: 45, s: 20 }, { t: 55, s: 40 }, { t: 65, s: 60 }, { t: 75, s: 80 }, { t: 85, s: 100 }])
     }
 
-    // Çizgi parçaları (düzgün: düz çizgiler, basamaklı: yatay + dikey)
+    // Line segments (smooth: straight lines, stepped: horizontal + vertical)
     readonly property var segs: {
         const out = []
         const p = points
@@ -90,7 +90,7 @@ ColumnLayout {
     Segment {
         visible: !ed.readOnly
         controlled: true
-        model: ["Düzgün geçiş", "Basamaklı"]
+        model: [I18n.t("Smooth"), I18n.t("Stepped")]
         current: ed.smoothCurve ? 0 : 1
         onPicked: i => ed.smoothPicked(i === 0)
     }
@@ -127,7 +127,7 @@ ColumnLayout {
                 }
             }
 
-            // Anlık sıcaklık
+            // Current temperature
             Rectangle {
                 visible: isFinite(ed.liveTemp) && ed.liveTemp >= ed.tMin && ed.liveTemp <= ed.tMax
                 x: ed.px(ed.liveTemp) - 1; width: 2; height: plot.height
@@ -150,7 +150,7 @@ ColumnLayout {
                 }
             }
 
-            // Sürüklenebilir noktalar (model = sayı: sürüklerken bileşen yeniden oluşmasın)
+            // Draggable points (model = a number, so the delegates aren't recreated while dragging)
             Repeater {
                 model: ed.points.length
                 Item {
@@ -183,21 +183,21 @@ ColumnLayout {
 
     StyledText {
         visible: !ed.readOnly
-        text: "Nokta " + (ed.selIndex + 1) + " / " + ed.points.length + " · sürükle ya da aşağıdan ayarla"
+        text: I18n.t("Point %1 / %2 · drag it or set it below").arg(ed.selIndex + 1).arg(ed.points.length)
         color: Colours.fgDim
         font.pixelSize: 11
     }
     Stepper {
         visible: !ed.readOnly
         Layout.fillWidth: true
-        label: "Sıcaklık"; unit: "°C"; from: ed.tMin; to: ed.tMax
+        label: I18n.t("Temperature"); unit: "°C"; from: ed.tMin; to: ed.tMax
         value: ed.sel.t
         onMoved: v => ed.movePoint(ed.selIndex, v, ed.sel.s)
     }
     Stepper {
         visible: !ed.readOnly
         Layout.fillWidth: true
-        label: "Fan hızı"; unit: "%"; from: 0; to: 100
+        label: I18n.t("Fan speed"); unit: "%"; from: 0; to: 100
         value: ed.sel.s
         onMoved: v => ed.movePoint(ed.selIndex, ed.sel.t, v)
     }
@@ -207,14 +207,14 @@ ColumnLayout {
         spacing: 8
         Btn {
             Layout.fillWidth: true; Layout.preferredWidth: 1
-            icon: "add"; text: "Ekle"
+            icon: "add"; text: I18n.t("Add")
             enabled: ed.points.length < 12
             opacity: enabled ? 1 : 0.4
             onClicked: ed.add()
         }
         Btn {
             Layout.fillWidth: true; Layout.preferredWidth: 1
-            icon: "delete"; text: "Sil"
+            icon: "delete"; text: I18n.t("Delete")
             enabled: ed.points.length > 1
             opacity: enabled ? 1 : 0.4
             onClicked: ed.removeSelected()

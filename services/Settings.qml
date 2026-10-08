@@ -4,9 +4,9 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// Kalıcı ayarlar: ~/.config/ccenter/settings.json (XDG_CONFIG_HOME varsa oradan).
-// Uygulama yalnızca bu dosyaya yazar; dosya ilk ayar değişikliğinde oluşur. Silmek tüm ayarları sıfırlar.
-// Biçim: { version, safety, configs: { "<NBFC config adı>": { fans: { "0": st, ... }, global: { on, st } } } }
+// Persistent settings: ~/.config/ccenter/settings.json (or $XDG_CONFIG_HOME/ccenter).
+// The app writes only this file; it is created on the first change. Deleting it resets everything.
+// Format: { version, safety, configs: { "<NBFC config name>": { fans: { "0": st, ... }, global: { on, st } } } }
 Singleton {
     id: root
 
@@ -15,7 +15,7 @@ Singleton {
     property var data: ({ version: 1, configs: {} })
     property bool dirReady: false
 
-    // ---------- doğrulama: dosyadan gelen her şey sınırlanır, bozuksa null ----------
+    // ---------- validation: everything read from the file is clamped; invalid entries become null ----------
     function num(v, lo, hi) {
         const n = Number(v)
         return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : NaN
@@ -25,7 +25,7 @@ Singleton {
         const mode = Math.round(num(st.mode, 0, 2))
         if (!isFinite(mode)) return null
         const fixed = num(st.fixed, 0, 1)
-        // Array.from: Qt'nin liste tipini (Repeater modelData vb.) de kabul eder; Array.isArray onu reddeder
+        // Array.from also accepts Qt's list type (Repeater modelData etc.); Array.isArray rejects it
         let curve = st.curve && typeof st.curve.length === "number"
             ? Array.from(st.curve).map(p => ({ t: Math.round(num(p && p.t, 0, 110)), s: Math.round(num(p && p.s, 0, 100)) }))
                       .filter(p => isFinite(p.t) && isFinite(p.s))
@@ -52,7 +52,7 @@ Singleton {
         const st = cleanSt(c.global.st)
         return st ? { on: c.global.on === true, st: st } : null
     }
-    // ---------- profiller (config başına): configs[id].profiles = [{ name, fans: { "0": st }, global: { on, st } }] ----------
+    // ---------- profiles (per config): configs[id].profiles = [{ name, fans: { "0": st }, global: { on, st } }] ----------
     function cleanName(n) { return typeof n === "string" ? n.trim().slice(0, 32) : "" }
     function cleanProfile(p) {
         if (!p || typeof p !== "object") return null
@@ -92,17 +92,23 @@ Singleton {
         edit(d => { slot(d, id).active = name })
     }
 
-    // Bildirim ayarları (varsayılan: açık)
+    // Notification settings (default: on)
     function notifyOn(key) { return !(data.notify && data.notify[key] === false) }
     function setNotify(key, v) { edit(d => { if (!d.notify || typeof d.notify !== "object") d.notify = {}; d.notify[key] = v === true }) }
 
-    // Arayüz seçenekleri (varsayılan: açık), ör. "tray"
+    // UI options (default: on), e.g. "tray"
     function uiOn(key) { return !(data.ui && data.ui[key] === false) }
+    // UI language: "tr" | "en" | "" (follow the system language)
+    function uiLang() {
+        const l = data.ui && typeof data.ui.lang === "string" ? data.ui.lang : ""
+        return ["tr", "en"].indexOf(l) >= 0 ? l : ""
+    }
+    function setUiLang(l) { edit(d => { if (!d.ui || typeof d.ui !== "object") d.ui = {}; d.ui.lang = l }) }
     function setUi(key, v) { edit(d => { if (!d.ui || typeof d.ui !== "object") d.ui = {}; d.ui[key] = v === true }) }
 
-    // Klavye efekti: { effect: "static"|"breathing", source: "single"|"multi"|"theme", colors: ["#rrggbb"…], speed: 0..1,
-    //                 min: 0..1, max: 0..1 (nefesin en düşük/en yüksek seviyesi), themeCount: 3..6, color: "#rrggbb" }
-    //   effect: "static" | "breathing" (nefes) | "cycle" (renk geçişi)
+    // Keyboard effect: { effect, source: "single"|"multi"|"theme", colors: ["#rrggbb"...], speed: 0..1,
+    //                   min: 0..1, max: 0..1 (lowest/highest breathing level), themeCount: 3..6, color: "#rrggbb" }
+    //   effect: "static" | "breathing" | "cycle" (colour cycle)
     function kbdOf() {
         const k = data.kbd && typeof data.kbd === "object" ? data.kbd : {}
         const hex = x => typeof x === "string" && /^#[0-9a-fA-F]{6}$/.test(x)
@@ -132,7 +138,7 @@ Singleton {
         return isFinite(s) ? s : NaN
     }
 
-    // ---------- yazma ----------
+    // ---------- writing ----------
     function edit(fn) {
         const d = JSON.parse(JSON.stringify(data))
         if (!d.configs || typeof d.configs !== "object") d.configs = {}
@@ -159,7 +165,7 @@ Singleton {
     function write() {
         if (!dirReady) {
             mkdir.go(["mkdir", "-p", dir], code => {
-                if (code !== 0) { console.warn("[ccenter] ayar klasörü oluşturulamadı: " + root.dir); return }
+                if (code !== 0) { console.warn("[ccenter] could not create the settings folder: " + root.dir); return }
                 root.dirReady = true
                 root.write()
             })
@@ -168,24 +174,24 @@ Singleton {
         file.setText(JSON.stringify(data, null, 2) + "\n")
     }
 
-    // Kapanmadan önce: bekleyen değişikliği hemen yaz (yoksa son 500 ms'deki değişiklik kaybolur)
+    // Before quitting: write the pending change now (otherwise a change from the last 500 ms is lost)
     function flush() {
         if (!saveTimer.running) return
         saveTimer.stop()
         write()
     }
 
-    // Art arda gelen değişiklikleri tek yazmada topla
+    // Batch rapid changes into one write
     Timer { id: saveTimer; interval: 500; onTriggered: root.write() }
     Cmd { id: mkdir }
 
     FileView {
         id: file
         path: root.path
-        blockLoading: true          // ayarlar fan kartları oluşmadan hazır olsun
-        atomicWrites: true          // önce geçici dosyaya yazar, sonra yerine koyar: yarım dosya kalmaz
-        blockWrites: true           // yazma bitmeden dönme: kapanırken flush() son değişikliği kaybetmesin
-        printErrors: false          // dosya henüz yoksa hata basma
+        blockLoading: true          // settings must be ready before the fan cards are created
+        atomicWrites: true          // write to a temp file first, then move it into place: never a half-written file
+        blockWrites: true           // don't return before the write is done, so flush() on quit doesn't lose the last change
+        printErrors: false          // no error if the file doesn't exist yet
         onLoaded: {
             try {
                 const d = JSON.parse(text())
@@ -194,7 +200,7 @@ Singleton {
                     root.dirReady = true
                 }
             } catch (e) {
-                console.warn("[ccenter] settings.json okunamadı, varsayılanlar kullanılıyor: " + e)
+                console.warn("[ccenter] could not read settings.json, using defaults: " + e)
             }
         }
     }

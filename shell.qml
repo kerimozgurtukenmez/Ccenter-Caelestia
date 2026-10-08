@@ -11,43 +11,54 @@ import qs.services
 
 ShellRoot {
     id: root
-    // Pencere durumu pencerenin dışında tutulur: pencere kapanınca tamamen yok edilir
-    // (arayüz, grafik bağlamı ve çizim önbellekleri bellekten silinir; fan kontrolü FanState'te sürer)
-    // Servisle (CCENTER_BACKGROUND=1) başlarsa pencere açılmadan arka planda çalışır
+    // The window state lives outside the window: closing the window destroys it completely
+    // (UI, graphics context and render caches are freed; fan control keeps running in FanState)
+    // Started by the service (CCENTER_BACKGROUND=1) it runs in the background without opening the window
     property bool shown: Quickshell.env("CCENTER_BACKGROUND") !== "1"
     property int tab: 0
 
     LazyLoader {
         active: root.shown
-        // FloatingWindow = normal xdg pencere (Hyprland tile'lar). PanelWindow layer-shell'dir, tile olmaz.
+        // FloatingWindow = a normal xdg window (Hyprland tiles it). PanelWindow is layer-shell and doesn't tile.
         FloatingWindow {
             title: "Ccenter-Caelestia"
             visible: true
-            // Pencere kapatılınca uygulama kapanmaz, arka planda devam eder (open ile geri açılır)
+            // Closing the window doesn't quit the app; it keeps running in the background (reopen with `ccenter`)
             onClosed: root.shown = false
             implicitWidth: 600
             implicitHeight: 780
             color: Colours.surface
-            // Caelestia token'ları ekrana göre çalışır (köşe, boşluk vb.)
+            // Caelestia's tokens are per screen (rounding, spacing etc.)
             contentItem.Tokens.screen: screen?.name ?? ""
 
             ColumnLayout {
                 anchors { fill: parent; margins: Tokens.padding.largeIncreased }
                 spacing: Tokens.spacing.large
 
-                Row {
+                RowLayout {
+                    Layout.fillWidth: true
                     StyledText { text: "Ccenter"; color: Colours.fg; font { pixelSize: 26; bold: true } }
                     StyledText { text: "-Caelestia"; color: Colours.primary; font { pixelSize: 26; bold: true } }
+                    Item { Layout.fillWidth: true }
+                    // Language switch (saved in settings; default follows the system language)
+                    Segment {
+                        Layout.fillWidth: false
+                        implicitWidth: 120
+                        model: I18n.languages.map(l => l.id.toUpperCase())
+                        controlled: true
+                        current: I18n.languages.findIndex(l => l.id === I18n.lang)
+                        onPicked: i => I18n.setLang(I18n.languages[i].id)
+                    }
                 }
 
                 RowLayout {
                     spacing: Tokens.spacing.medium
                     NavButton {
-                        icon: "mode_fan"; label: "Fan Kontrol"; sub: "NBFC · RPM ve eğri"
+                        icon: "mode_fan"; label: I18n.t("Fan control"); sub: I18n.t("NBFC · speed and curves")
                         active: root.tab === 0; onClicked: root.tab = 0
                     }
                     NavButton {
-                        icon: "keyboard"; label: "Klavye"; sub: "RGB · renk ve parlaklık"
+                        icon: "keyboard"; label: I18n.t("Keyboard"); sub: I18n.t("RGB · color and brightness")
                         active: root.tab === 1; onClicked: root.tab = 1
                     }
                 }
@@ -66,27 +77,32 @@ ShellRoot {
 
     Timer { id: gcTimer; interval: 1000; onTriggered: gc() }
 
-    // Sensörler: Fan sekmesi açıkken, Ccenter fan kontrol ederken ya da bildirimler açıkken (kritik sıcaklık için) okunur
+    // Sensors are read while the fan tab is open, while Ccenter drives fans, or while notifications are on (critical temperature)
     Binding { target: Sensors; property: "active"; value: (root.shown && root.tab === 0) || Nbfc.needsSensors || Notify.enabled }
-    // Her zaman çalışan servisler (pencere kapalıyken de): olay izleyici ve fan durumu
+    // Always-running services (also while the window is closed): event watcher and fan state
     readonly property var alerts: Alerts
     readonly property var fanState: FanState
-    readonly property var keyboard: Keyboard     // klavye efekti pencere kapalıyken de çalışsın
-    // Tempo: pencere açıkken ya da fan kontrol ederken hızlı, değilse sakin (performans)
+    readonly property var keyboard: Keyboard     // keyboard effects keep running while the window is closed
+    // Polling pace: fast while the window is open or Ccenter drives fans, otherwise relaxed (performance)
     Binding { target: Nbfc; property: "uiVisible"; value: root.shown }
     Binding { target: Sensors; property: "fast"; value: root.shown || Nbfc.controlling }
 
-    // Sistem tepsisi (Caelestia barı): sol tık pencereyi açar/gizler, menüde profiller ve maksimum fan
+    // Tray (Caelestia bar): left click shows/hides the window, the menu has profiles and max fan
     Binding { target: Tray; property: "windowVisible"; value: root.shown }
-    Binding { target: Tray; property: "profiles"; value: FanState.allProfiles().map(p => p.name) }
-    Binding { target: Tray; property: "active"; value: Settings.activeOf(Nbfc.configId) }
+    Binding { target: Tray; property: "profiles"; value: FanState.allProfiles().map(p => FanState.displayName(p)) }
+    Binding { target: Tray; property: "active"; value: FanState.activeName() }
+    Binding {
+        target: Tray; property: "labels"
+        value: ({ show: I18n.t("Show window"), hide: I18n.t("Hide window"), boost: I18n.t("Max fan (15 min)"),
+                  boostOff: I18n.t("Turn max fan off"), quit: I18n.t("Quit") })
+    }
     Binding { target: Tray; property: "boost"; value: Nbfc.boosting }
     Binding {
         target: Tray; property: "tooltip"
-        value: (Settings.activeOf(Nbfc.configId) || "Özel ayarlar")
+        value: (FanState.activeName() || I18n.t("Custom settings"))
                + (isFinite(Nbfc.temp) ? " · CPU " + Math.round(Nbfc.temp) + "°C" : "")
                + (isFinite(Sensors.gpu) ? " · GPU " + Math.round(Sensors.gpu) + "°C" : "")
-               + (Nbfc.boosting ? " · Maksimum fan" : "")
+               + (Nbfc.boosting ? " · " + I18n.t("Max fan") : "")
     }
     Connections {
         target: Tray
@@ -94,59 +110,66 @@ ShellRoot {
         function onProfileRequested(name) { FanState.applyByName(name, false) }
     }
 
-    // Terminalden kontrol: qs -c Ccenter ipc call cc <komut> [argüman]
+    // Terminal control: ccenter <command> (= qs ipc -p <app folder> call cc <command> [argument])
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
         function open(): void { root.shown = true }
         function hide(): void { root.shown = false }
-        // Tamamen kapat: kontrol edilen fanlar NBFC'nin otomatik kontrolüne döner
+        // Quit completely: fans driven by Ccenter go back to NBFC's automatic control
         function quit(): void { Nbfc.releaseAndQuit() }
-        // Profil uygular (arayüzdeki butonla aynı kod). Büyük/küçük harf fark etmez.
+        // Applies a profile (same code as the button in the UI). Case-insensitive.
         function profile(name: string): string { return FanState.applyByName(name, true) }
-        // Maksimum fan: dakika (0 = kapat, -1 = süresiz)
+        // Max fan: minutes (0 = off, -1 = until turned off)
         function boost(minutes: int): string {
             Nbfc.setBoost(minutes)
-            return minutes === 0 ? "Maksimum fan kapatıldı" : "Maksimum fan açık" + (minutes > 0 ? " (" + minutes + " dk)" : " (süresiz)")
+            return minutes === 0 ? I18n.t("Max fan off")
+                 : minutes > 0 ? I18n.t("Max fan on (%1 min)").arg(minutes) : I18n.t("Max fan on (until turned off)")
         }
         function profiles(): string { return FanState.profileList() }
-        // Klavye ışığı: renk "#rrggbb", parlaklık yüzde (0-100)
+        // UI language: tr | en
+        function lang(id: string): string {
+            if (I18n.languages.findIndex(l => l.id === id) < 0) return "tr | en"
+            I18n.setLang(id)
+            return I18n.t("Language: %1").arg(I18n.languages.find(l => l.id === id).name)
+        }
+        // Keyboard light: colour "#rrggbb", brightness in percent (0-100)
         function kbd(): string { return Keyboard.statusText() }
         function kbdColor(hex: string): string {
-            if (!Keyboard.rgb) return "Bu klavye ışığı RGB değil"
-            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return "Renk #rrggbb biçiminde olmalı (ör. #ff0000)"
+            if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
+            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return I18n.t("The color must look like #rrggbb (e.g. #ff0000)")
             Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)
-            return Keyboard.writable ? "Renk: " + Keyboard.hex(Keyboard.color) : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
+            return Keyboard.writable ? I18n.t("Color: %1").arg(Keyboard.hex(Keyboard.color)) : Keyboard.noPermissionText()
         }
         function kbdEffect(name: string): string {
-            if (["static", "breathing", "cycle"].indexOf(name) < 0) return "Efekt: static | breathing | cycle"
-            if (!Keyboard.rgb) return "Bu klavye ışığı RGB değil"
+            if (["static", "breathing", "cycle"].indexOf(name) < 0) return I18n.t("Effect: %1").arg("static | breathing | cycle")
+            if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
             Keyboard.setEffect(name)
-            return Keyboard.writable ? "Efekt: " + name : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
+            return Keyboard.writable ? I18n.t("Effect: %1").arg(name) : Keyboard.noPermissionText()
         }
         function kbdSource(name: string): string {
-            if (["single", "multi", "theme"].indexOf(name) < 0) return "Renk kaynağı: single | multi | theme"
+            if (["single", "multi", "theme"].indexOf(name) < 0) return I18n.t("Color source: single | multi | theme")
             Keyboard.setSource(name)
-            return "Renk kaynağı: " + name
+            return I18n.t("Color source: %1").arg(name)
         }
         function kbdSpeed(percent: int): string {
             Keyboard.setSpeed(Math.max(0, Math.min(100, percent)) / 100)
-            return "Hız: %" + Math.round(Keyboard.speed * 100) + " (bir nefes " + Keyboard.period.toFixed(1) + " sn)"
+            return I18n.t("Speed: %1% (%2 s per breath / color)").arg(Math.round(Keyboard.speed * 100)).arg(I18n.num(Keyboard.period, 1))
         }
-        // Caelestia kaynağında renk sayısı (3-6)
+        // Number of colours for the Caelestia source (3-6)
         function kbdThemeCount(n: int): string {
             Keyboard.setThemeCount(n)
-            return "Caelestia renk sayısı: " + Keyboard.themeCount + " (" + Keyboard.themeColors.map(c => Keyboard.hex(c)).join(" ") + ")"
+            return I18n.t("Caelestia colors: %1 (%2)").arg(Keyboard.themeCount).arg(Keyboard.themeColors.map(c => Keyboard.hex(c)).join(" "))
         }
-        // Nefesin en düşük ve en yüksek seviyesi (yüzde)
+        // Lowest and highest breathing level (percent)
         function kbdRange(low: int, high: int): string {
             Keyboard.setRange(low / 100, high / 100)
-            return "Nefes aralığı: %" + Math.round(Keyboard.minLevel * 100) + " – %" + Math.round(Keyboard.maxLevel * 100)
+            return I18n.t("Breathing range: %1% – %2%").arg(Math.round(Keyboard.minLevel * 100)).arg(Math.round(Keyboard.maxLevel * 100))
         }
         function kbdBrightness(percent: int): string {
-            if (!Keyboard.available) return "Klavye ışığı bulunamadı"
+            if (!Keyboard.available) return I18n.t("No keyboard light found")
             Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
-            return Keyboard.writable ? "Parlaklık: %" + Math.max(0, Math.min(100, percent)) : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
+            return Keyboard.writable ? I18n.t("Brightness: %1%").arg(Math.max(0, Math.min(100, percent))) : Keyboard.noPermissionText()
         }
         function status(): string { return FanState.statusText() }
     }

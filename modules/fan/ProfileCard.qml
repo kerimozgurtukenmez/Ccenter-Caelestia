@@ -3,23 +3,23 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Fan profilleri: hazırlar + kullanıcının kaydettikleri (NBFC config'ine göre ayrı tutulur)
+// Fan profiles: built-in + the user's own (kept separately per NBFC config)
 Card {
     id: card
-    title: "Profiller"
+    title: I18n.t("Profiles")
 
     readonly property string cfgId: Nbfc.configId
     readonly property var custom: Settings.profilesOf(cfgId)
-    readonly property string active: Settings.activeOf(cfgId)
+    readonly property string active: FanState.activeId()      // id of the active profile ("" = none)
     readonly property var all: FanState.builtins.map(p => Object.assign({ builtin: true }, p))
                                    .concat(custom.map(p => Object.assign({ builtin: false, icon: "tune" }, p)))
     readonly property string newName: nameInput.text.trim()
-    readonly property bool nameTaken: FanState.builtins.some(p => p.name === newName)
-    property string confirmDelete: ""        // silmek için ikinci tık
+    readonly property bool nameTaken: FanState.reservedName(newName)
+    property string confirmDelete: ""        // second click needed to delete
 
     StyledText {
         Layout.fillWidth: true
-        text: card.active !== "" ? "Aktif: " + card.active : "Özel ayarlar (profil seçili değil)"
+        text: card.active !== "" ? I18n.t("Active: %1").arg(FanState.activeName()) : I18n.t("Custom settings (no profile selected)")
         color: Colours.fgDim
         font.pixelSize: 11
     }
@@ -51,11 +51,11 @@ Card {
                         font { family: Colours.iconFont; pixelSize: 18 }
                     }
                     StyledText {
-                        text: chip.deleting ? "Silinsin mi?" : chip.modelData.name
+                        text: chip.deleting ? I18n.t("Delete?") : FanState.displayName(chip.modelData)
                         color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fg
                         font { pixelSize: 13; bold: true }
                     }
-                    // Kendi profillerinde sil düğmesi (tıklama alanı aşağıda, en üstte)
+                    // Delete button on the user's own profiles (its click area is further down, on top)
                     StyledText {
                         id: closeIcon
                         visible: !chip.modelData.builtin
@@ -64,13 +64,13 @@ Card {
                         font { family: Colours.iconFont; pixelSize: 16 }
                     }
                 }
-                // Tıklama alanları içerikten sonra gelir ki üstte kalsın (z: -1 tıklamaları yutuyordu)
+                // Click areas come after the content so they stay on top (z: -1 used to swallow clicks)
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        console.log("[ccenter] profil butonu: " + chip.modelData.name)
-                        if (chip.deleting) { card.confirmDelete = ""; return }   // silmekten vazgeç
+                        console.log("[ccenter] profile button: " + chip.modelData.name)
+                        if (chip.deleting) { card.confirmDelete = ""; return }   // cancel the delete
                         card.confirmDelete = ""
                         console.log("[ccenter] " + FanState.applyByName(chip.modelData.name, false))
                     }
@@ -95,7 +95,7 @@ Card {
         }
     }
 
-    // Maksimum fan: tüm fanlar %100, süre dolunca her fan kendi ayarına döner
+    // Max fan: all fans at 100%; when the time is up each fan returns to its own setting
     property double now: Date.now()
     Timer { running: Nbfc.boostUntil > 0; interval: 1000; repeat: true; triggeredOnStart: true; onTriggered: card.now = Date.now() }
     function left() {
@@ -112,12 +112,12 @@ Card {
         }
         StyledText {
             Layout.fillWidth: true
-            text: Nbfc.boosting ? "Maksimum fan açık" + (Nbfc.boostUntil > 0 ? " · " + card.left() + " kaldı" : "") : "Maksimum fan"
+            text: Nbfc.boosting ? I18n.t("Max fan on") + (Nbfc.boostUntil > 0 ? " · " + I18n.t("%1 left").arg(card.left()) : "") : I18n.t("Max fan")
             color: Nbfc.boosting ? Colours.error : Colours.fg
             font { pixelSize: 13; bold: Nbfc.boosting }
         }
         Repeater {
-            model: Nbfc.boosting ? [] : [{ t: "5 dk", m: 5 }, { t: "15 dk", m: 15 }, { t: "Süresiz", m: -1 }]
+            model: Nbfc.boosting ? [] : [{ t: I18n.t("5 min"), m: 5 }, { t: I18n.t("15 min"), m: 15 }, { t: I18n.t("Until off"), m: -1 }]
             Btn {
                 required property var modelData
                 text: modelData.t
@@ -127,13 +127,13 @@ Card {
         Btn {
             visible: Nbfc.boosting
             icon: "close"
-            text: "Kapat"
+            text: I18n.t("Turn off")
             filled: true
             onClicked: Nbfc.setBoost(0)
         }
     }
 
-    // Mevcut ayarları profil olarak kaydet
+    // Save the current settings as a profile
     RowLayout {
         Layout.fillWidth: true
         spacing: 8
@@ -147,7 +147,7 @@ Card {
                 visible: nameInput.text === ""
                 x: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Mevcut ayarları kaydet: profil adı…"
+                text: I18n.t("Save the current settings: profile name…")
                 color: Colours.fgDim
                 font.pixelSize: 13
             }
@@ -166,7 +166,7 @@ Card {
         Btn {
             id: save
             icon: "save"
-            text: "Kaydet"
+            text: I18n.t("Save")
             filled: true
             enabled: card.newName !== "" && !card.nameTaken
             opacity: enabled ? 1 : 0.4
@@ -180,7 +180,7 @@ Card {
     }
     StyledText {
         visible: card.nameTaken
-        text: "Bu ad hazır bir profile ait, başka bir ad seç."
+        text: I18n.t("This name belongs to a built-in profile, pick another one.")
         color: Colours.error
         font.pixelSize: 11
     }

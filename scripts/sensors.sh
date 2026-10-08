@@ -1,11 +1,11 @@
 #!/bin/sh
-# Her turda çalışır; bu yüzden sadece kabuk yerleşikleri (read, echo) kullanılır: dosya başına süreç açılmaz.
-# Sadece uygulamanın kullandığı sensörler okunur (NVMe, Wi-Fi, RAM gibi aygıtlar boşuna uyandırılmaz).
-# Çıktı satırları:
-#   ad|etiket|miliderece        CPU / iGPU / AMD GPU sıcaklıkları
-#   fan|sürücü|numara|rpm       fan devri (sürücü veriyorsa; bazı sürücüler hep 0 verir)
-#   nvidia||miliderece          NVIDIA sıcaklığı   (nvidia||uyku: kart uykuda, nvidia||atla: bu tur okunmadı)
-# $1 = "gpu" ise NVIDIA sıcaklığı nvidia-smi ile okunur (pahalı, ~30 ms); değilse atlanır.
+# Runs every round, so it uses shell builtins only (read, echo): no process per file.
+# Only the sensors the app uses are read (NVMe, Wi-Fi, RAM sensors are not woken up for nothing).
+# Output lines:
+#   name|label|millidegrees     CPU / iGPU / AMD GPU temperatures
+#   fan|driver|number|rpm       fan speed (if the driver reports it; some always report 0)
+#   nvidia||millidegrees        NVIDIA temperature   (nvidia||asleep: card asleep, nvidia||skip: skipped this round)
+# If $1 = "gpu", the NVIDIA temperature is read with nvidia-smi (expensive, ~30 ms); otherwise it is skipped.
 for h in /sys/class/hwmon/hwmon*; do
   [ -r "$h/name" ] || continue
   read -r n < "$h/name"
@@ -26,7 +26,7 @@ for h in /sys/class/hwmon/hwmon*; do
     echo "fan|$n|${i%_input}|$v"
   done
 done
-# NVIDIA: kart uykudaysa nvidia-smi çağırıp onu uyandırma
+# NVIDIA: if the card is asleep, don't call nvidia-smi and wake it up
 for d in /sys/bus/pci/devices/*; do
   [ -r "$d/vendor" ] || continue
   read -r ven < "$d/vendor"
@@ -36,9 +36,9 @@ for d in /sys/bus/pci/devices/*; do
   rs=""
   [ -r "$d/power/runtime_status" ] && read -r rs < "$d/power/runtime_status"
   if [ "$rs" = "suspended" ]; then
-    echo "nvidia||uyku"
+    echo "nvidia||asleep"
   elif [ "$1" != "gpu" ]; then
-    echo "nvidia||atla"
+    echo "nvidia||skip"
   elif command -v nvidia-smi >/dev/null 2>&1; then
     t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
     t=${t%%[!0-9]*}

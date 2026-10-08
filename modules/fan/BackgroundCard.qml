@@ -3,15 +3,15 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Arka plan çalışması: pencere kapanınca uygulama sürer; oturum açılınca başlatma (systemd kullanıcı servisi)
+// Background running: the app keeps running when the window closes; start on login (systemd user service)
 Card {
-    title: "Arka plan"
+    title: I18n.t("Background")
 
     ToggleRow {
         icon: "login"
-        label: "Oturum açılınca arka planda başlat"
-        sub: Autostart.installed ? "Pencere açılmadan başlar, fan ayarların hemen uygulanır"
-                                 : "Önce kurulum gerekli: sudo make install"
+        label: I18n.t("Start in the background on login")
+        sub: Autostart.installed ? I18n.t("Starts without a window; your fan settings apply right away")
+                                 : I18n.t("Needs an installation first: ./install.sh")
         controlled: true
         checked: Autostart.enabled
         enabled: Autostart.installed && !Autostart.busy
@@ -20,8 +20,8 @@ Card {
     }
     ToggleRow {
         icon: "dock_to_left"
-        label: "Sistem tepsisinde göster"
-        sub: "Barda ikon: tıkla aç/gizle, üzerine gel: profiller, maksimum fan, kapat"
+        label: I18n.t("Show in the system tray")
+        sub: I18n.t("Icon in the bar: click to show/hide, hover for profiles, max fan, quit")
         controlled: true
         checked: Tray.enabled
         onToggled: v => Settings.setUi("tray", v)
@@ -29,7 +29,7 @@ Card {
     StyledText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: "Pencereyi kapatınca uygulama arka planda çalışmaya devam eder. Tekrar açmak için uygulama menüsünden ya da terminalden: ccenter"
+        text: I18n.t("Closing the window keeps the app running in the background. To open it again use the app menu or the terminal: ccenter")
         color: Colours.fgDim
         font.pixelSize: 11
     }
@@ -44,7 +44,7 @@ Card {
     Btn {
         Layout.fillWidth: true
         icon: "power_settings_new"
-        text: "Tamamen kapat (fanlar NBFC'ye döner)"
+        text: I18n.t("Quit (fans go back to NBFC)")
         onClicked: Nbfc.releaseAndQuit()
     }
 }

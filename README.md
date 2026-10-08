@@ -9,7 +9,6 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 > - The fan section **writes fan speeds to your hardware** through NBFC. A wrong setting can make your laptop run hot. Keep an eye on temperatures.
 > - In *Fixed* and *Curve* modes the app itself drives the fans. Closing the window keeps it running in the background; quitting it hands the fans back to NBFC. If the app is killed in another way, the fans **stay at the last speed it set**; run `nbfc set -a` to return them to automatic control.
 > - Things will change and break without notice. The name is temporary too.
-> - The interface is currently in Turkish only.
 
 ## Features
 
@@ -40,6 +39,12 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 - **Color cycle effect**: the light flows smoothly between your colors (or the Caelestia theme colors) without dimming
 - Caelestia colors: 3 to 6 colors taken from your current theme, picked so they look different from each other
 - More effects (rainbow, …) are not there yet
+
+### Languages
+- The interface is available in **English** and **Turkish**. Switch with the **TR / EN** button in the window header (or `ccenter lang en`); the change applies right away.
+- By default it follows your system language (Turkish if your locale is `tr_*`, English otherwise). Your choice is saved.
+- Terminal commands, notifications, the tray menu and `install.sh` / `uninstall.sh` follow the same language.
+- Built-in profile names work in any language from the terminal (`quiet`, `Quiet` and `Sessiz` all apply the same profile).
 
 ### Caelestia integration
 - Colors follow Caelestia's scheme (`~/.local/state/caelestia/scheme.json`) live.
@@ -81,7 +86,7 @@ The app writes its settings to `~/.config/ccenter/settings.json`, and only after
 
 ### Permissions: asked, never taken silently
 
-- **Keyboard light (optional).** To change the keyboard color and brightness, Ccenter needs write access to two files of your keyboard backlight (`/sys/class/leds/*::kbd_backlight/brightness` and `multi_intensity`). `install.sh` explains what this does and **asks** you; the default answer is no. Only if you say yes, your password is asked for that single step, which adds `/etc/udev/rules.d/90-ccenter.rules`. You can also grant it later from the Keyboard tab (the "İzin ver" button; your password is asked by the system's own dialog) and remove it there again ("İzni kaldır"). It only affects the keyboard light; it gives no access to fans, files or the system.
+- **Keyboard light (optional).** To change the keyboard color and brightness, Ccenter needs write access to two files of your keyboard backlight (`/sys/class/leds/*::kbd_backlight/brightness` and `multi_intensity`). `install.sh` explains what this does and **asks** you; the default answer is no. Only if you say yes, your password is asked for that single step, which adds `/etc/udev/rules.d/90-ccenter.rules`. You can also grant it later from the Keyboard tab (the "Grant permission" button; your password is asked by the system's own dialog) and remove it there again ("Remove permission"). It only affects the keyboard light; it gives no access to fans, files or the system.
 - **NBFC service actions** (start/stop/restart the fan service, apply a config) ask for your password through polkit every time you use them. Setting fan speeds does not need a password.
 
 ### Uninstall
@@ -108,7 +113,7 @@ The `Makefile` is for packagers (`make DESTDIR=… PREFIX=/usr install`) or a sy
 ccenter                     # open the window (starts the app if needed)
 ccenter status              # fans, temperatures, active profile
 ccenter profiles            # list profiles (* = active)
-ccenter profile Sessiz      # apply a profile (case-insensitive)
+ccenter profile quiet       # apply a profile (case-insensitive; built-ins: auto, quiet, balanced, performance)
 ccenter boost 15            # max fan for 15 minutes (0 = off, -1 = until turned off)
 ccenter kbd color "#ff0000" # keyboard color
 ccenter kbd brightness 50   # keyboard brightness in percent (0 = off)
@@ -117,12 +122,13 @@ ccenter kbd source theme    # breathing colors: single | multi | theme (Caelesti
 ccenter kbd speed 60        # effect speed 0-100
 ccenter kbd range 20 80     # breathing lowest and highest level in percent
 ccenter kbd themecount 5    # number of Caelestia colors (3-6)
+ccenter lang en             # interface language: en | tr
 ccenter hide                # also: open, toggle
 ccenter quit                # quit; fans go back to NBFC auto
 ccenter --help
 ```
 
-Handy for Hyprland keybinds, e.g. `bind = SUPER, F9, exec, ccenter profile Performans`.
+Handy for Hyprland keybinds, e.g. `bind = SUPER, F9, exec, ccenter profile performance`.
 
 The window uses the app ID `ccenter`, so you can target it in Hyprland rules with `class:^(ccenter)$`.
 
@@ -140,13 +146,23 @@ Run it straight from the cloned folder without installing:
 ./bin/ccenter
 ```
 
-`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. Keyboard permission works the same way (Keyboard tab > "İzin ver"). Quickshell reloads the UI live when you save a file.
+`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. Keyboard permission works the same way (Keyboard tab > "Grant permission"). Quickshell reloads the UI live when you save a file.
+
+### Notes for contributors and forks
+
+- **Architecture:** the logic lives in `services/` (singletons that keep running when the window is closed); `modules/` is only the view and talks to the services. Fan settings have one source of truth, `services/FanState.qml`; the fan cards display it and report changes back. The window is created only while it is open (`LazyLoader` in `shell.qml`) to keep the background footprint small.
+- **Style:** sizes, spacing, fonts and animations come from Caelestia (`Tokens.*`, `StyledText`, `Anim`/`CAnim`), colors from `services/Colours.qml`. Avoid hard-coded values so the app keeps matching the user's shell.
+- **Text and translations:** write UI text in English and wrap it: `I18n.t("Fan %1").arg(n)`. Then add the Turkish line to `services/translations.js` (the key is the exact English text). Missing translations fall back to English. To add a language, add a block to `translations.js` and an entry to `I18n.languages` in `services/I18n.qml`. Shell scripts use a small `t "English" "Türkçe"` helper instead.
+- **Performance:** the app runs in the background all the time. `scripts/sensors.sh` runs every few seconds, so it only uses shell built-ins; heavy bindings are skipped while the window is hidden (`Nbfc.uiVisible`).
+- **Safety:** never write NBFC config files and never touch Caelestia's files (read only). Anything that changes the system must be opt-in and have a way to undo it.
+- Test without clicking through the UI with the terminal commands (`./bin/ccenter status`, `profile …`, `kbd …`).
 
 ## Project layout
 
 ```
 shell.qml           window, tabs, terminal commands (IPC), tray wiring
-services/           always-running backends: NBFC, fan state, settings, sensors, colors, notifications, tray
+services/           always-running backends: NBFC, fan state, keyboard, settings, sensors, colors, notifications, tray
+services/I18n.qml   UI language; translations in services/translations.js
 modules/fan/        fan tab (UI only)
 modules/keyboard/   keyboard tab
 components/         shared UI components
@@ -158,6 +174,7 @@ dist/               desktop entry and systemd user service
 install.sh          install into ~/.local (no sudo; asks about the keyboard permission)
 uninstall.sh        remove it again
 Makefile            system-wide install / packaging
+LICENSE             GPL-3.0
 ```
 
 ## Status / roadmap
@@ -171,6 +188,19 @@ Makefile            system-wide install / packaging
 - [x] Keyboard color cycle effect
 - [ ] More keyboard effects (rainbow, …)
 - [ ] Keep the keyboard color in sync with the Caelestia theme automatically (one-click theme color is already there)
-- [ ] English UI
+- [x] English and Turkish UI
 
 Issues and feedback are welcome, but expect rough edges.
+
+## License
+
+Copyright (C) 2026 Kerim Özgür Tükenmez
+
+Ccenter is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License version 3** as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but **without any warranty**; without even the implied warranty of merchantability or fitness for a particular purpose. See [`LICENSE`](LICENSE) for the full text.
+
+Third-party parts:
+
+- **[Caelestia shell](https://github.com/caelestia-dots/shell)** (GPL-3.0): Ccenter imports its QML plugin at runtime, and the transparency maths in `services/Colours.qml` is adapted from Caelestia's `Colours.qml`. Caelestia is not bundled.
+- **[Quickshell](https://quickshell.org)** (LGPL-3.0), **[nbfc-linux](https://github.com/nbfc-linux/nbfc-linux)** (GPL-3.0) and the **[Material Symbols](https://fonts.google.com/icons)** font (Apache-2.0) are used as separate programs or system fonts; they are not included in this repository.
+
+Ccenter is not affiliated with Caelestia, NBFC or any laptop vendor.
