@@ -116,13 +116,13 @@ ShellRoot {
             if (!Keyboard.rgb) return "Bu klavye ışığı RGB değil"
             if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return "Renk #rrggbb biçiminde olmalı (ör. #ff0000)"
             Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)
-            return Keyboard.writable ? "Renk: " + Keyboard.hex(Keyboard.color) : "Yazma izni yok: kurulum gerekli (sudo make install)"
+            return Keyboard.writable ? "Renk: " + Keyboard.hex(Keyboard.color) : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
         }
         function kbdEffect(name: string): string {
             if (["static", "breathing", "cycle"].indexOf(name) < 0) return "Efekt: static | breathing | cycle"
             if (!Keyboard.rgb) return "Bu klavye ışığı RGB değil"
             Keyboard.setEffect(name)
-            return Keyboard.writable ? "Efekt: " + name : "Yazma izni yok: kurulum gerekli (sudo make install)"
+            return Keyboard.writable ? "Efekt: " + name : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
         }
         function kbdSource(name: string): string {
             if (["single", "multi", "theme"].indexOf(name) < 0) return "Renk kaynağı: single | multi | theme"
@@ -146,7 +146,7 @@ ShellRoot {
         function kbdBrightness(percent: int): string {
             if (!Keyboard.available) return "Klavye ışığı bulunamadı"
             Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
-            return Keyboard.writable ? "Parlaklık: %" + Math.max(0, Math.min(100, percent)) : "Yazma izni yok: kurulum gerekli (sudo make install)"
+            return Keyboard.writable ? "Parlaklık: %" + Math.max(0, Math.min(100, percent)) : "Yazma izni yok: uygulamada Klavye > 'İzin ver'"
         }
         function status(): string { return FanState.statusText() }
     }

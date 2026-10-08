@@ -1,7 +1,8 @@
-# Ccenter kurulumu
-#   sudo make install      kurar
+# Sistem genelinde kurulum ve paketleme içindir. Normal kullanıcı için önerilen yol: ./install.sh
+# (kullanıcı klasörüne kurar, yönetici şifresi gerektirmez, klavye iznini sorar).
+#   sudo make install      /usr altına kurar (klavye izni EKLEMEZ)
 #   sudo make uninstall    kaldırır (kullanıcı ayarları ~/.config/ccenter'a dokunmaz)
-#   sudo make udev         sadece klavye ışığı izni (udev kuralı); geliştirme kopyası için
+#   sudo make udev         klavye ışığı izni (udev kuralı) — isteğe bağlı, ayrıca çalıştırılır
 # Paketleme için: make DESTDIR=/paket/kökü PREFIX=/usr install
 
 PREFIX  ?= /usr
@@ -26,16 +27,20 @@ install:
 	install -d $(APPDIR)
 	install -m 644 $(APP_FILES) $(APPDIR)/
 	cp -r --no-preserve=ownership $(APP_DIRS) $(APPDIR)/
+	install -Dm 644 dist/90-ccenter.rules $(APPDIR)/dist/90-ccenter.rules
 	find $(APPDIR) -type d -exec chmod 755 {} +
 	find $(APPDIR) -type f -exec chmod 644 {} +
 	chmod 755 $(APPDIR)/scripts/*.sh $(APPDIR)/scripts/*.py
 	install -Dm 755 bin/ccenter $(BINDIR)/ccenter
-	install -Dm 644 dist/ccenter.desktop $(APPSDIR)/ccenter.desktop
+	install -d $(APPSDIR) $(UNITDIR)
+	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/ccenter.desktop > $(APPSDIR)/ccenter.desktop
+	chmod 644 $(APPSDIR)/ccenter.desktop
 	install -Dm 644 assets/ccenter.svg $(ICONDIR)/ccenter.svg
-	install -Dm 644 dist/ccenter.service $(UNITDIR)/ccenter.service
-	$(MAKE) --no-print-directory udev
+	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/ccenter.service > $(UNITDIR)/ccenter.service
+	chmod 644 $(UNITDIR)/ccenter.service
 	@echo
 	@echo "Ccenter kuruldu. Başlatmak için: ccenter   (ya da uygulama menüsünden)"
+	@echo "Klavye ışığı izni eklenmedi. İstersen: sudo make udev   (ya da uygulamadaki 'İzin ver')"
 
 uninstall: uninstall-udev
 	rm -rf $(APPDIR)

@@ -24,6 +24,10 @@ Singleton {
     property int brightness: 0
     property color color: "white"             // seçilen renk (tam yoğunlukta; parlaklık ayrı)
     property string error: ""
+    // Yazma izni veren udev kuralı nerede: "etc" (install.sh / "İzin ver" ekledi, uygulamadan kaldırılabilir),
+    // "lib" (sistem paketi ekledi), "" (yok)
+    property string ruleAt: ""
+    property bool permBusy: false
 
     // ---------- efekt ayarları (settings.json → kbd) ----------
     property string effect: "static"          // static | breathing | cycle
@@ -31,7 +35,8 @@ Singleton {
     property var colors: ["#ff0000", "#00ff00", "#0040ff"]
     property real speed: 0.5                  // 0 yavaş .. 1 hızlı
     readonly property real period: 8 - 7 * speed   // bir nefes (sn): 8 .. 1
-    readonly property bool effectActive: effect !== "static" && rgb && writable
+    property bool paused: false               // izin kaldırılırken efekt duraklar (tercih korunur)
+    readonly property bool effectActive: effect !== "static" && rgb && writable && !paused
     property int cycleIndex: 0                // şu an nefes alan rengin sırası (arayüz gösterir)
     property int themeCount: 3                // Caelestia kaynağında kaç renk (3..6)
     property real minLevel: 0                 // nefesin en düşük seviyesi (0..1); 0 = tamamen söner
@@ -65,7 +70,7 @@ Singleton {
                                : source === "theme" ? themeColors : [color]
 
     // ---------- okuma ----------
-    function refresh() {
+    function refresh(done) {
         // Tek seferde: dizin, yazılabilirlik, değerler. Sadece kabuk yerleşikleri (read).
         reader.go(["sh", "-c",
             'for d in /sys/class/leds/*::kbd_backlight; do [ -e "$d/brightness" ] || continue; ' +
@@ -73,7 +78,9 @@ Singleton {
             'for f in brightness max_brightness multi_intensity multi_max_intensity multi_index; do ' +
             '  [ -r "$d/$f" ] && { read -r v < "$d/$f"; echo "$f|$v"; }; done; ' +
             '[ -w "$d/brightness" ] && echo "w|brightness"; [ -w "$d/multi_intensity" ] && echo "w|multi_intensity"; ' +
-            'break; done'], (code, out) => root.parse(out))
+            'break; done; ' +
+            '[ -f /etc/udev/rules.d/90-ccenter.rules ] && echo "rule|etc"; [ -f /usr/lib/udev/rules.d/90-ccenter.rules ] && echo "rule|lib"; true'],
+            (code, out) => { root.parse(out); if (done) done() })
     }
     function parse(out) {
         const v = {}, w = {}
@@ -85,6 +92,7 @@ Singleton {
             else v[k] = val
         }
         if (!ready) loadSaved()               // ilk okumada kayıtlı efekt ayarlarını yükle (ayar dosyası bu noktada hazır)
+        ruleAt = /rule\|etc/.test(out) ? "etc" : /rule\|lib/.test(out) ? "lib" : ""
         dir = v.dir || ""
         rgb = !!v.multi_intensity && /red/.test(v.multi_index || "") && /green/.test(v.multi_index || "")
         writable = !!w.brightness && (!rgb || !!w.multi_intensity)
@@ -239,12 +247,51 @@ Singleton {
         onTriggered: root.tick()
     }
 
+    // Bekleyen (sürükleme sonrası 500 ms) hız/seviye kayıtlarını hemen ayara geçir
+    function flushSaves() {
+        if (saveSpeed.running) { saveSpeed.stop(); Settings.setKbd({ speed: speed }) }
+        if (saveRange.running) { saveRange.stop(); Settings.setKbd({ min: minLevel, max: maxLevel }) }
+    }
     // Uygulama kapanırken: efekt yarıda kalıp klavye karanlık kalmasın, seçilen sabit renge dön (sonra cb)
     function restoreForQuit(cb) {
+        flushSaves()
         if (!effectActive) { cb(); return }
         effect = "static"                                   // ayara yazılmaz: açılınca efekt devam eder
         oneShot.go(["sh", "-c", 'printf "%s\\n" "$2" > "$1"', "sh", dir + "/multi_intensity", intensity(color, 1)], () => cb())
     }
+
+    // ---------- yazma izni (kullanıcı isteyince; sistemin şifre penceresiyle) ----------
+    // Kural dosyası uygulamayla gelir (dist/90-ccenter.rules); /etc/udev/rules.d altına eklenir, udev hemen uygular.
+    readonly property string ruleFile: Quickshell.shellPath("dist/90-ccenter.rules")
+    function grantPermission() {
+        permBusy = true
+        error = ""
+        perm.go(["pkexec", "sh", "-c",
+                 'install -Dm644 "$1" /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules && ' +
+                 'udevadm trigger --action=change --subsystem-match=leds && udevadm settle', "sh", ruleFile],
+                (code, out, err) => root.permDone(code, out, err))
+    }
+    function revokePermission() {
+        // İzin gidince efekt yazamaz: klavyeyi seçilen sabit renge al ve efekti duraklat; tercih (ayar) korunur,
+        // izin tekrar verilince efekt kaldığı yerden devam eder
+        if (effectActive) { paused = true; send("multi_intensity", intensity(color, 1)) }
+        permBusy = true
+        error = ""
+        perm.go(["pkexec", "sh", "-c",
+                 'rm -f /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' +
+                 'for f in /sys/class/leds/*::kbd_backlight/brightness /sys/class/leds/*::kbd_backlight/multi_intensity; do ' +
+                 '[ -e "$f" ] && chmod 0644 "$f"; done; true'],
+                (code, out, err) => root.permDone(code, out, err))
+    }
+    function permDone(code, out, err) {
+        permBusy = false
+        // 126/127: şifre penceresi kapatıldı / yetki verilmedi
+        if (code !== 0) error = code === 126 || code === 127 ? "İşlem iptal edildi." : "Başarısız: " + (err || out).trim().split("\n")[0]
+        // Duraklatmayı yeni izin durumu okunduktan sonra kaldır: izin gittiyse writable=false efekti durdurur,
+        // iptal edildiyse efekt sürer (önce kaldırsak efekt izinsiz yazmaya çalışıp kendini kapatırdı)
+        refresh(() => { root.paused = false })
+    }
+    Cmd { id: perm }
 
     // Terminal (IPC) için: "#rrggbb" ve yüzde
     function hex(c) {
@@ -260,7 +307,7 @@ Singleton {
             + "\nEfekt: " + (effect === "breathing" ? "nefes (" + src[source] + ", " + period.toFixed(1) + " sn, %"
                 + Math.round(minLevel * 100) + "–%" + Math.round(maxLevel * 100) + ")"
                 : effect === "cycle" ? "renk geçişi (" + src[source] + ", renk başına " + period.toFixed(1) + " sn)" : "sabit")
-            + (writable ? "" : "\nYazma izni yok: kurulum gerekli (sudo make install)")
+            + (writable ? "" : "\nYazma izni yok: uygulamada Klavye > 'İzin ver' (ya da install.sh)")
     }
 
     Cmd { id: reader }

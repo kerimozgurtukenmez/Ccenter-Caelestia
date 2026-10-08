@@ -93,13 +93,53 @@ Flickable {
                     }
                 }
             }
-            StyledText {
+            // İzin yok: ne yapılacağını anlat, kullanıcı isterse ver
+            ColumnLayout {
                 visible: Keyboard.available && !Keyboard.writable && Keyboard.ready
                 Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Işığa yazma izni yok. Kurulum, sadece bu ışığın renk ve parlaklık dosyalarına izin veren bir udev kuralı ekler: sudo make install"
-                color: Colours.warning
-                font.pixelSize: 12
+                spacing: 8
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Klavye ışığını değiştirmek için izin gerekiyor."
+                    color: Colours.warning
+                    font { pixelSize: 13; bold: true }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Ne yapılır: /etc/udev/rules.d/90-ccenter.rules eklenir; " + Keyboard.name + " ışığının yalnızca renk ve parlaklık dosyaları yazılabilir olur (bugün 'sudo tee' ile yaptığın şey).\n"
+                        + "Ne değişir: bu bilgisayardaki programlar klavye ışığının rengini ve parlaklığını değiştirebilir; fanlara, dosyalara ya da sisteme erişim vermez.\n"
+                        + "Geri alma: buradan 'İzni kaldır'. Şifren sistemin kendi penceresinde sorulur, Ccenter görmez."
+                    color: Colours.fgDim
+                    font.pixelSize: 11
+                }
+                Btn {
+                    icon: "key"
+                    text: Keyboard.permBusy ? "Şifre bekleniyor…" : "İzin ver"
+                    filled: true
+                    enabled: !Keyboard.permBusy
+                    onClicked: Keyboard.grantPermission()
+                }
+            }
+            // İzin uygulamanın eklediği kuraldan geliyorsa geri alınabilir
+            RowLayout {
+                visible: Keyboard.writable && Keyboard.ruleAt === "etc"
+                Layout.fillWidth: true
+                spacing: 8
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Klavye ışığı izni açık (/etc/udev/rules.d/90-ccenter.rules)."
+                    color: Colours.fgDim
+                    font.pixelSize: 11
+                }
+                Btn {
+                    icon: "key_off"
+                    text: Keyboard.permBusy ? "Şifre bekleniyor…" : "İzni kaldır"
+                    enabled: !Keyboard.permBusy
+                    onClicked: Keyboard.revokePermission()
+                }
             }
             StyledText {
                 visible: Keyboard.error !== ""

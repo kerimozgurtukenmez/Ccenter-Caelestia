@@ -1,4 +1,6 @@
-# Ccenter arka plan servisi (systemd kullanıcı servisi), make install ile /usr/lib/systemd/user altına kurulur.
+# Ccenter arka plan servisi (systemd kullanıcı servisi).
+# install.sh bunu ~/.local/share/systemd/user altına, make install <önek>/lib/systemd/user altına kurar;
+# @BINDIR@ kurulumda ccenter'ın bulunduğu klasörle değiştirilir.
 # Uygulamadaki "Oturum açılınca arka planda başlat" anahtarı bunu etkinleştirir/devre dışı bırakır.
 # Elle: systemctl --user enable --now ccenter.service   |   kapatmak: systemctl --user disable --now ccenter.service
 [Unit]
@@ -9,9 +11,9 @@ After=graphical-session.target
 [Service]
 Type=simple
 # Pencere açılmadan başlar; açmak için: ccenter
-ExecStart=/usr/bin/ccenter --background
+ExecStart=@BINDIR@/ccenter --background
 # Durdururken önce düzgün kapanmasını iste: klavye efekti sabit renge, fanlar NBFC'ye döner (Tamamen kapat ile aynı)
-ExecStop=-/usr/bin/ccenter quit
+ExecStop=-@BINDIR@/ccenter quit
 # Yine de (çökme, zaman aşımı) fanlar NBFC'nin otomatik kontrolüne döner
 ExecStopPost=-/usr/bin/nbfc set -a
 Restart=on-failure
