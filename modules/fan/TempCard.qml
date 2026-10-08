@@ -29,20 +29,20 @@ Card {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        Text {
+                        StyledText {
                             text: r && r.label === "CPU" ? "memory" : "developer_board"
                             color: Colours.primary
                             font { family: Colours.iconFont; pixelSize: 16 }
                         }
-                        Text { text: r ? r.label : ""; color: Colours.fgDim; font { pixelSize: 11; bold: true; letterSpacing: 0.8 } }
+                        StyledText { text: r ? r.label : ""; color: Colours.fgDim; font { pixelSize: 11; bold: true; letterSpacing: 0.8 } }
                     }
-                    Text {
+                    StyledText {
                         Layout.fillWidth: true
                         text: known ? Math.round(r.value) + "°C" : (r && r.note !== "" ? r.note : "—")
-                        color: known && r.value >= 85 ? "#f2b8b5" : (known && r.value >= 70 ? "#ffcc80" : Colours.fg)
+                        color: known && r.value >= 85 ? Colours.error : (known && r.value >= 70 ? Colours.warning : Colours.fg)
                         font { pixelSize: known ? 24 : 15; bold: true }
                     }
-                    Text {
+                    StyledText {
                         Layout.fillWidth: true
                         visible: r && r.model !== ""
                         text: r ? r.model : ""
@@ -52,7 +52,7 @@ Card {
                         color: Colours.fg
                         font.pixelSize: 11
                     }
-                    Text {
+                    StyledText {
                         visible: r && r.extra !== ""
                         text: r ? r.extra : ""
                         color: Colours.fgDim
@@ -62,7 +62,7 @@ Card {
             }
         }
     }
-    Text {
+    StyledText {
         visible: Sensors.readings.length === 0
         text: "Sensör okunamadı"
         color: Colours.fgDim

@@ -18,15 +18,15 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: parent.radius
-        color: "white"
+        color: Colours.fg
         opacity: ma.containsMouse ? 0.1 : 0
     }
     RowLayout {
         id: row
         anchors.centerIn: parent
         spacing: 6
-        Text { visible: b.icon !== ""; text: b.icon; color: b.fgc; font { family: Colours.iconFont; pixelSize: 18 } }
-        Text { visible: b.text !== ""; text: b.text; color: b.fgc; font { pixelSize: 13; bold: true } }
+        StyledText { visible: b.icon !== ""; text: b.icon; color: b.fgc; font { family: Colours.iconFont; pixelSize: 18 } }
+        StyledText { visible: b.text !== ""; text: b.text; color: b.fgc; font { pixelSize: 13; bold: true } }
     }
     MouseArea {
         id: ma

@@ -10,6 +10,9 @@ Singleton {
     property bool active: true
     property var readings: []     // [{ label, model, value (°C ya da NaN), note }]
     property var hw: ({ cpu: "", cores: "", gpu: "", igpu: "" })
+    // Fan kontrolü için: harici GPU sıcaklığı (uykuda / yoksa NaN)
+    readonly property real gpu: { const r = readings.find(x => x.label === "GPU"); return r ? r.value : NaN }
+    readonly property bool hasGpu: readings.some(x => x.label === "GPU")
 
     // "13th Gen Intel(R) Core(TM) i7-13700H" -> "Intel Core i7-13700H"
     function cleanCpu(n) {

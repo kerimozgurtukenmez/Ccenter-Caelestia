@@ -19,7 +19,7 @@ Singleton {
     property var recommended: []
     property string message: ""
     property bool messageError: false
-    property real safety: 90              // bu sıcaklıkta özel modlardaki fanlar %100'e çıkar
+    property real safety: isFinite(Settings.safety()) ? Settings.safety() : 90   // bu sıcaklıkta özel modlardaki fanlar %100'e çıkar
 
     property var targets: ({})            // fan index -> { mode, fixed, curve }  (sadece Sabit/Eğri)
     property var lastSent: ({})
@@ -127,6 +127,41 @@ Singleton {
             root.mergeConfigs()
         })
     }
+    // Seçili config'in her fan için eşik tablosu, bizim eğri biçiminde (config dosyası sadece okunur).
+    // [{ points: [{t, s}], hyst } | null]  — null: config eşik tablosu tanımlamıyor
+    property var configCurves: []
+    function loadConfigCurves() {
+        const id = configId
+        if (id === "") { configCurves = []; return }
+        enqueue("cfg:curves", ["sh", "-c",
+            'for d in /etc/nbfc/configs /usr/share/nbfc/configs /usr/local/share/nbfc/configs; do ' +
+            '[ -f "$d/$1.json" ] && exec cat "$d/$1.json"; done; exit 1', "sh", id], (code, out) => {
+            if (id !== root.configId) return
+            try {
+                root.configCurves = code === 0 ? (JSON.parse(out).FanConfigurations || []).map(f => root.toCurve(f.TemperatureThresholds)) : []
+            } catch (e) {
+                root.configCurves = []
+            }
+        })
+    }
+    // NBFC: sıcaklık UpThreshold'a ulaşınca FanSpeed'e çık, DownThreshold altına inince geri dön = basamaklı eğri
+    function toCurve(th) {
+        if (!Array.isArray(th) || th.length === 0) return null
+        const rows = th.map(r => ({ up: Number(r.UpThreshold), down: Number(r.DownThreshold), s: Number(r.FanSpeed) }))
+                       .filter(r => isFinite(r.up) && isFinite(r.s)).sort((a, b) => a.up - b.up)
+        const pts = []
+        for (const r of rows) {
+            let t = Math.max(30, Math.min(100, Math.round(r.up)))     // editör aralığı 30..100
+            if (pts.length && t <= pts[pts.length - 1].t) t = pts[pts.length - 1].t + 1
+            if (t > 100) break
+            pts.push({ t: t, s: Math.max(0, Math.min(100, Math.round(r.s))) })
+        }
+        if (pts.length < 2) return null
+        const gaps = rows.filter(r => r.up > 0 && isFinite(r.down)).map(r => r.up - r.down)
+        const hyst = gaps.length ? Math.max(0, Math.min(10, Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length))) : 3
+        return { points: pts, hyst: hyst }
+    }
+
     function recommend() {
         enqueue("cfg:rec", ["nbfc", "config", "-r"], (code, out) => {
             if (code !== 0) return
@@ -207,10 +242,23 @@ Singleton {
     }
 
     // ---------- fan kontrolü ----------
+    // Sabit/Eğri modunda fan varsa sensörler pencere kapalıyken de okunur (güvenlik sınırı GPU'yu da izlesin)
+    readonly property bool needsSensors: Object.keys(targets).length > 0
+
+    // NBFC'nin bu fan için okuduğu sıcaklık (config'teki sensör; bu makinede CPU)
     function tempOf(i) {
         const t = fans[i] ? fans[i].temp : NaN
         return isFinite(t) ? t : temp
     }
+    // st.src: "cpu" (NBFC sensörü, varsayılan) | "gpu" | "max". GPU okunamıyorsa (uyku/yok) CPU'ya düşer.
+    function sourceTemp(i, src) {
+        const c = tempOf(i), g = Sensors.gpu
+        if (src === "gpu") return isFinite(g) ? g : c
+        if (src === "max") return isFinite(g) ? (isFinite(c) ? Math.max(c, g) : g) : c
+        return c
+    }
+    // Güvenlik sınırı her zaman en sıcak olana bakar
+    function hottest(i) { return sourceTemp(i, "max") }
 
     // st.curve = [{ t: °C, s: % }] (sıcaklığa göre sıralı), st.smooth = noktalar arası düz geçiş mi
     function curveAt(st, T) {
@@ -226,12 +274,27 @@ Singleton {
         return p[p.length - 1].s
     }
 
+    // Eğri modunda fanın şu anki seviyesi (%): histerezis ve kademeli yavaşlama bunun üzerinden çalışır
+    property var level: ({})
+    readonly property int rampDown: 5        // her kontrol turunda (2 sn) en fazla bu kadar yavaşlar
+
+    // Hızlanma hemen; yavaşlama için sıcaklık eğrinin st.hyst °C altına inmeli, sonra kademeli iner
+    function curveLevel(i, st, T) {
+        const up = curveAt(st, T)
+        const prev = level[i]
+        if (prev === undefined || !isFinite(prev) || up >= prev) return up
+        const down = curveAt(st, T + st.hyst)
+        const target = Math.min(prev, Math.max(up, down))
+        return Math.max(target, prev - rampDown)
+    }
+
     // idx = fan index, -1 = tüm fanlar. st = { mode: 0 oto | 1 sabit | 2 eğri, fixed: 0..1, curve: [{t,s}], smooth }
     function applyTarget(idx, st) {
         const ids = idx < 0 ? fans.map((f, i) => i) : [idx]
         const t = Object.assign({}, targets)
         for (const i of ids) {
             lastSent[i] = undefined
+            level[i] = undefined                    // ayar değişti: yeni eğri hemen geçerli
             if (st.mode === 0) delete t[i]; else t[i] = st
         }
         targets = t
@@ -245,16 +308,17 @@ Singleton {
 
     // Her durum okumasından sonra çalışır: Sabit/Eğri modundaki fanlara hız yazar
     function control() {
-        if (!root.running || readOnly) return
+        if (!root.running || readOnly || quitting) return
         for (let i = 0; i < fans.length; i++) {
             const t = targets[i]
             if (!t) continue
             if (fans[i].auto) lastSent[i] = undefined   // servis auto'ya dönmüşse yeniden yaz
-            const T = tempOf(i)
+            const T = sourceTemp(i, t.src)
+            const H = hottest(i)
             let pct
-            if (isFinite(T) && T >= safety) pct = 100
-            else if (t.mode === 1) pct = t.fixed * 100
-            else if (isFinite(T)) pct = curveAt(t, T)
+            if (isFinite(H) && H >= safety) { pct = 100; level[i] = 100 }   // güvenlik her şeyin önünde
+            else if (t.mode === 1) { pct = t.fixed * 100; level[i] = undefined }
+            else if (isFinite(T)) { pct = curveLevel(i, t, T); level[i] = pct }
             else continue
             if (!isFinite(pct)) continue
             pct = Math.max(0, Math.min(100, Math.round(pct)))
@@ -264,6 +328,17 @@ Singleton {
                 enqueue("spd:" + i, ["nbfc", "set", "-f", String(i), "-s", String(pct)], null)
             }
         }
+    }
+
+    // Uygulamayı tamamen kapat: önce kontrol ettiğimiz fanları NBFC'nin otomatik kontrolüne geri ver
+    property bool quitting: false
+    function releaseAndQuit() {
+        if (quitting) return
+        quitting = true
+        const owned = Object.keys(targets).length > 0
+        targets = ({})
+        if (owned && running) enqueue("quit", ["nbfc", "set", "-a"], () => Qt.quit())
+        else Qt.quit()
     }
 
     // ---------- altyapı ----------
@@ -281,6 +356,6 @@ Singleton {
         }
     }
 
-    onConfigIdChanged: mergeConfigs()
+    onConfigIdChanged: { mergeConfigs(); loadConfigCurves() }
     Component.onCompleted: { loadConfigs(); refreshBoot() }
 }
