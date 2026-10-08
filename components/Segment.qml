@@ -6,6 +6,7 @@ Rectangle {
     id: seg
     property var model: []
     property int current: 0
+    property bool controlled: false   // true: tıklayınca kendi kendine değişmez, current dışarıdan bağlanır
     signal picked(int i)              // sadece kullanıcı tıklayınca
 
     Layout.fillWidth: true
@@ -34,7 +35,7 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: { seg.current = index; seg.picked(index) }
+                    onClicked: { if (!seg.controlled) seg.current = index; seg.picked(index) }
                 }
             }
         }

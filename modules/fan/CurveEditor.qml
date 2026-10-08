@@ -89,6 +89,7 @@ ColumnLayout {
 
     Segment {
         visible: !ed.readOnly
+        controlled: true
         model: ["Düzgün geçiş", "Basamaklı"]
         current: ed.smoothCurve ? 0 : 1
         onPicked: i => ed.smoothPicked(i === 0)
