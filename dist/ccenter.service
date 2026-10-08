@@ -10,10 +10,14 @@ After=graphical-session.target
 Type=simple
 # Pencere açılmadan başlar; açmak için: ccenter
 ExecStart=/usr/bin/ccenter --background
-# Servis durunca (ya da çökerse) fanlar NBFC'nin otomatik kontrolüne döner
+# Durdururken önce düzgün kapanmasını iste: klavye efekti sabit renge, fanlar NBFC'ye döner (Tamamen kapat ile aynı)
+ExecStop=-/usr/bin/ccenter quit
+# Yine de (çökme, zaman aşımı) fanlar NBFC'nin otomatik kontrolüne döner
 ExecStopPost=-/usr/bin/nbfc set -a
 Restart=on-failure
 RestartSec=3
+# Başka bir Ccenter kopyası açıksa ccenter 3 ile çıkar: tekrar tekrar başlatmaya çalışma
+RestartPreventExitStatus=3
 
 [Install]
 WantedBy=graphical-session.target

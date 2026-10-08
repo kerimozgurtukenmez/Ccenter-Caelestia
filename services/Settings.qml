@@ -100,6 +100,33 @@ Singleton {
     function uiOn(key) { return !(data.ui && data.ui[key] === false) }
     function setUi(key, v) { edit(d => { if (!d.ui || typeof d.ui !== "object") d.ui = {}; d.ui[key] = v === true }) }
 
+    // Klavye efekti: { effect: "static"|"breathing", source: "single"|"multi"|"theme", colors: ["#rrggbb"…], speed: 0..1,
+    //                 min: 0..1, max: 0..1 (nefesin en düşük/en yüksek seviyesi), themeCount: 3..6, color: "#rrggbb" }
+    //   effect: "static" | "breathing" (nefes) | "cycle" (renk geçişi)
+    function kbdOf() {
+        const k = data.kbd && typeof data.kbd === "object" ? data.kbd : {}
+        const hex = x => typeof x === "string" && /^#[0-9a-fA-F]{6}$/.test(x)
+        const colors = k.colors && typeof k.colors.length === "number" ? Array.from(k.colors).filter(hex).slice(0, 6) : []
+        const sp = num(k.speed, 0, 1)
+        let lo = num(k.min, 0, 1), hi = num(k.max, 0, 1)
+        if (!isFinite(lo)) lo = 0
+        if (!isFinite(hi)) hi = 1
+        if (lo > hi) lo = hi
+        return {
+            effect: ["static", "breathing", "cycle"].indexOf(k.effect) >= 0 ? k.effect : "static",
+            themeCount: isFinite(num(k.themeCount, 3, 6)) ? Math.round(num(k.themeCount, 3, 6)) : 3,
+            source: ["single", "multi", "theme"].indexOf(k.source) >= 0 ? k.source : "single",
+            colors: colors.length ? colors : ["#ff0000", "#00ff00", "#0040ff"],
+            speed: isFinite(sp) ? sp : 0.5,
+            min: lo,
+            max: hi,
+            color: hex(k.color) ? k.color : ""
+        }
+    }
+    function setKbd(patch) {
+        edit(d => { d.kbd = Object.assign({}, d.kbd && typeof d.kbd === "object" ? d.kbd : {}, patch) })
+    }
+
     function safety() {
         const s = num(data.safety, 70, 100)
         return isFinite(s) ? s : NaN

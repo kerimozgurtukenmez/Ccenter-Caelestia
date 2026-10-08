@@ -34,6 +34,11 @@ Kullanım: ccenter [komut]
   kbd                Klavye ışığı durumu
   kbd color <#hex>   Klavye rengi (ör. kbd color "#ff0000")
   kbd brightness <%> Klavye parlaklığı 0-100
+  kbd effect <ad>    Klavye efekti: static | breathing (nefes) | cycle (renk geçişi)
+  kbd source <ad>    Efekt renkleri: single (seçilen) | multi (liste) | theme (Caelestia)
+  kbd speed <%>      Efekt hızı 0-100
+  kbd range <% %>    Nefesin en düşük ve en yüksek seviyesi (ör. kbd range 10 90)
+  kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
   quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner)
   --help | --version
 EOF
@@ -61,7 +66,7 @@ guard() {
     if [ -n "$other" ]; then
         echo "ccenter: başka bir Ccenter kopyası çalışıyor: $other" >&2
         echo "İki kopya aynı anda fanları kontrol etmesin diye başlatılmadı. Önce onu kapat." >&2
-        exit 1
+        exit 3                                    # servis bu kodda yeniden denemez (RestartPreventExitStatus=3)
     fi
 }
 
@@ -84,7 +89,12 @@ case "${1:-}" in
             "") ipc kbd ;;
             color) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd color <#rrggbb>" >&2; exit 2; }; ipc kbdColor "$3" ;;
             brightness) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd brightness <0-100>" >&2; exit 2; }; ipc kbdBrightness -- "$3" ;;
-            *) echo "Kullanım: ccenter kbd [color <#hex> | brightness <0-100>]" >&2; exit 2 ;;
+            effect) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd effect <static|breathing|cycle>" >&2; exit 2; }; ipc kbdEffect "$3" ;;
+            themecount) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd themecount <3-6>" >&2; exit 2; }; ipc kbdThemeCount -- "$3" ;;
+            source) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd source <single|multi|theme>" >&2; exit 2; }; ipc kbdSource "$3" ;;
+            range) [ $# -ge 4 ] || { echo "Kullanım: ccenter kbd range <en düşük %> <en yüksek %>" >&2; exit 2; }; ipc kbdRange -- "$3" "$4" ;;
+            speed) [ $# -ge 3 ] || { echo "Kullanım: ccenter kbd speed <0-100>" >&2; exit 2; }; ipc kbdSpeed -- "$3" ;;
+            *) echo "Kullanım: ccenter kbd [color <#hex> | brightness <0-100> | effect <ad> | source <ad> | speed <0-100>]" >&2; exit 2 ;;
         esac ;;
     -h|--help|help)
         usage ;;
