@@ -12,10 +12,10 @@ RowLayout {
     signal moved(int v)
 
     spacing: 6
-    Text { text: s.label; color: Colours.fgDim; font.pixelSize: 12 }
+    StyledText { text: s.label; color: Colours.fgDim; font.pixelSize: 12 }
     Item { Layout.fillWidth: true }
     StepBtn { icon: "remove"; onActivated: s.moved(Math.max(s.from, s.value - 1)) }
-    Text {
+    StyledText {
         Layout.minimumWidth: 46
         horizontalAlignment: Text.AlignHCenter
         text: s.value + s.unit

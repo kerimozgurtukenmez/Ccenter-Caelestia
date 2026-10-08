@@ -24,8 +24,8 @@ Rectangle {
                 Layout.preferredWidth: 1
                 radius: 15
                 color: seg.current === index ? Colours.primary : "transparent"
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Text {
+                Behavior on color { CAnim {} }
+                StyledText {
                     anchors.centerIn: parent
                     text: modelData
                     color: seg.current === index ? Colours.fgOnPrimary : Colours.fgDim

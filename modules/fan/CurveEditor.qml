@@ -9,6 +9,7 @@ ColumnLayout {
     property var points: []
     property bool smoothCurve: true
     property real liveTemp: NaN
+    property bool readOnly: false            // sadece göster (config eğrisi önizlemesi)
     property int selected: 0
     readonly property int tMin: 30
     readonly property int tMax: 100
@@ -87,6 +88,7 @@ ColumnLayout {
     }
 
     Segment {
+        visible: !ed.readOnly
         model: ["Düzgün geçiş", "Basamaklı"]
         current: ed.smoothCurve ? 0 : 1
         onPicked: i => ed.smoothPicked(i === 0)
@@ -108,7 +110,7 @@ ColumnLayout {
                     width: plot.width; height: 1
                     y: ed.py(modelData)
                     Rectangle { anchors.fill: parent; color: Colours.outline; opacity: 0.4 }
-                    Text { x: -30; y: -height / 2; text: modelData + "%"; color: Colours.fgDim; font.pixelSize: 9 }
+                    StyledText { x: -30; y: -height / 2; text: modelData + "%"; color: Colours.fgDim; font.pixelSize: 9 }
                 }
             }
             Repeater {
@@ -116,7 +118,7 @@ ColumnLayout {
                 Item {
                     x: ed.px(modelData); width: 1; height: plot.height
                     Rectangle { anchors.fill: parent; color: Colours.outline; opacity: 0.25 }
-                    Text {
+                    StyledText {
                         visible: modelData % 20 === 0
                         x: -width / 2; y: plot.height + 5
                         text: modelData + "°"; color: Colours.fgDim; font.pixelSize: 9
@@ -158,12 +160,13 @@ ColumnLayout {
                     y: pt ? ed.py(pt.s) - height / 2 : 0
                     Rectangle {
                         anchors.centerIn: parent
-                        width: chosen ? 18 : 14; height: width; radius: width / 2
+                        width: ed.readOnly ? 10 : (chosen ? 18 : 14); height: width; radius: width / 2
                         color: chosen ? Colours.primary : Colours.surfaceHigh
                         border { width: 3; color: Colours.primary }
                     }
                     MouseArea {
                         anchors.fill: parent
+                        enabled: !ed.readOnly
                         preventStealing: true
                         cursorShape: Qt.PointingHandCursor
                         onPressed: ed.selected = index
@@ -177,24 +180,28 @@ ColumnLayout {
         }
     }
 
-    Text {
+    StyledText {
+        visible: !ed.readOnly
         text: "Nokta " + (ed.selIndex + 1) + " / " + ed.points.length + " · sürükle ya da aşağıdan ayarla"
         color: Colours.fgDim
         font.pixelSize: 11
     }
     Stepper {
+        visible: !ed.readOnly
         Layout.fillWidth: true
         label: "Sıcaklık"; unit: "°C"; from: ed.tMin; to: ed.tMax
         value: ed.sel.t
         onMoved: v => ed.movePoint(ed.selIndex, v, ed.sel.s)
     }
     Stepper {
+        visible: !ed.readOnly
         Layout.fillWidth: true
         label: "Fan hızı"; unit: "%"; from: 0; to: 100
         value: ed.sel.s
         onMoved: v => ed.movePoint(ed.selIndex, ed.sel.t, v)
     }
     RowLayout {
+        visible: !ed.readOnly
         Layout.fillWidth: true
         spacing: 8
         Btn {

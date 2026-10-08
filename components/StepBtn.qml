@@ -12,7 +12,7 @@ Rectangle {
     radius: 13
     color: ma.pressed ? Colours.primary : Colours.surfaceContainer
 
-    Text {
+    StyledText {
         anchors.centerIn: parent
         text: b.icon
         color: ma.pressed ? Colours.fgOnPrimary : Colours.fg

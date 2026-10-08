@@ -12,7 +12,7 @@ Rectangle {
     radius: 14
     color: checked ? Colours.primary : Colours.surfaceHigh
     border { width: checked ? 0 : 2; color: Colours.outline }
-    Behavior on color { ColorAnimation { duration: 150 } }
+    Behavior on color { CAnim {} }
 
     Rectangle {
         width: t.checked ? 20 : 14
@@ -21,8 +21,8 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         x: t.checked ? t.width - width - 4 : 7
         color: t.checked ? Colours.fgOnPrimary : Colours.fgDim
-        Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on width { NumberAnimation { duration: 150 } }
+        Behavior on x { Anim {} }
+        Behavior on width { Anim {} }
     }
     MouseArea {
         anchors.fill: parent

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.services
 
 Rectangle {
@@ -13,18 +14,18 @@ Rectangle {
     Layout.fillWidth: true
     Layout.preferredWidth: 1
     implicitHeight: 84
-    radius: 22
+    radius: Tokens.rounding.largeIncreased
     color: active ? Colours.primary : (ma.containsMouse ? Colours.surfaceHigh : Colours.surfaceContainer)
-    Behavior on color { ColorAnimation { duration: 150 } }
+    Behavior on color { CAnim {} }
 
     RowLayout {
         anchors { fill: parent; margins: 16 }
         spacing: 14
 
         Rectangle {
-            implicitWidth: 48; implicitHeight: 48; radius: 16
+            implicitWidth: 48; implicitHeight: 48; radius: Tokens.rounding.large
             color: btn.active ? Qt.rgba(0, 0, 0, 0.15) : Colours.surfaceHigh
-            Text {
+            StyledText {
                 anchors.centerIn: parent
                 text: btn.icon
                 font { family: Colours.iconFont; pixelSize: 28 }
@@ -33,8 +34,8 @@ Rectangle {
         }
         ColumnLayout {
             spacing: 2
-            Text { text: btn.label; font { pixelSize: 16; bold: true } color: btn.active ? Colours.fgOnPrimary : Colours.fg }
-            Text { text: btn.sub; font.pixelSize: 12; color: btn.active ? Colours.fgOnPrimary : Colours.fgDim; opacity: 0.75 }
+            StyledText { text: btn.label; font { pixelSize: 16; bold: true } color: btn.active ? Colours.fgOnPrimary : Colours.fg }
+            StyledText { text: btn.sub; font.pixelSize: 12; color: btn.active ? Colours.fgOnPrimary : Colours.fgDim; opacity: 0.75 }
         }
         Item { Layout.fillWidth: true }
     }

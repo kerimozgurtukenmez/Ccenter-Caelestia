@@ -31,28 +31,28 @@ Card {
         RowLayout {
             anchors.fill: parent
             spacing: 12
-            Text { text: "tune"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 24 } }
+            StyledText { text: "tune"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 24 } }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
-                Text {
+                StyledText {
                     Layout.fillWidth: true
                     text: Nbfc.configId !== "" ? Nbfc.configId : "Config seçilmedi"
                     elide: Text.ElideRight
                     color: Colours.fg
                     font { pixelSize: 15; bold: true }
                 }
-                Text {
+                StyledText {
                     text: Nbfc.fans.length > 0 ? Nbfc.fans.length + " fan bulundu" : "Fan bilgisi yok"
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
             }
-            Text {
+            StyledText {
                 text: "expand_more"
                 color: Colours.fgDim
                 rotation: cfg.open ? 180 : 0
-                Behavior on rotation { NumberAnimation { duration: 150 } }
+                Behavior on rotation { Anim {} }
                 font { family: Colours.iconFont; pixelSize: 24 }
             }
         }
@@ -69,14 +69,14 @@ Card {
             implicitHeight: 40
             radius: 20
             color: Colours.surfaceHigh
-            Text {
+            StyledText {
                 x: 14
                 anchors.verticalCenter: parent.verticalCenter
                 text: "search"
                 color: Colours.fgDim
                 font { family: Colours.iconFont; pixelSize: 20 }
             }
-            Text {
+            StyledText {
                 visible: search.text === ""
                 x: 44
                 anchors.verticalCenter: parent.verticalCenter
@@ -95,7 +95,7 @@ Card {
             }
         }
 
-        Text {
+        StyledText {
             Layout.fillWidth: true
             text: Nbfc.configNote
             wrapMode: Text.WordWrap
@@ -116,7 +116,7 @@ Card {
                 height: 38
                 radius: 12
                 color: chosen ? Colours.primary : (ma.containsMouse ? Colours.surfaceHigh : "transparent")
-                Text {
+                StyledText {
                     anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14; right: tag.left; rightMargin: 8 }
                     text: modelData
                     elide: Text.ElideRight
@@ -127,13 +127,13 @@ Card {
                     id: tag
                     anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 12 }
                     spacing: 8
-                    Text {
+                    StyledText {
                         visible: Nbfc.recommended.indexOf(modelData) >= 0
                         text: "önerilen"
                         color: chosen ? Colours.fgOnPrimary : Colours.fgDim
                         font.pixelSize: 11
                     }
-                    Text {
+                    StyledText {
                         visible: modelData === Nbfc.configId
                         text: "check"
                         color: chosen ? Colours.fgOnPrimary : Colours.primary
@@ -161,7 +161,7 @@ Card {
                 onClicked: Nbfc.applyConfig(cfg.sel)
             }
         }
-        Text {
+        StyledText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Colours.fgDim

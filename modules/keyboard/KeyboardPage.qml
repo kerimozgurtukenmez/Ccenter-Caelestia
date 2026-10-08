@@ -71,7 +71,7 @@ Flickable {
                         }
                     }
                 }
-                Text {
+                StyledText {
                     Layout.alignment: Qt.AlignHCenter
                     color: Colours.fg
                     font { pixelSize: 13; bold: true; family: "monospace" }
@@ -94,13 +94,13 @@ Flickable {
                         implicitHeight: 38
                         radius: 12
                         color: page.mode === index ? Colours.primary : (ma.containsMouse ? Colours.surfaceHigh : "transparent")
-                        Text {
+                        StyledText {
                             anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14 }
                             text: modelData.name
                             color: page.mode === index ? Colours.fgOnPrimary : Colours.fg
                             font.pixelSize: 14
                         }
-                        Text {
+                        StyledText {
                             anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 12 }
                             text: modelData.colors > 0 ? modelData.colors + " renk" : "otomatik"
                             color: page.mode === index ? Colours.fgOnPrimary : Colours.fgDim
@@ -116,7 +116,7 @@ Flickable {
                         }
                     }
                 }
-                Text {
+                StyledText {
                     Layout.fillWidth: true
                     Layout.topMargin: 6
                     text: page.cur.hint
@@ -141,12 +141,12 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
-                Text { text: "sync"; font { family: Colours.iconFont; pixelSize: 24 } color: Colours.primary }
+                StyledText { text: "sync"; font { family: Colours.iconFont; pixelSize: 24 } color: Colours.primary }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
-                    Text { text: "Caelestia renk senkronizasyonu"; color: Colours.fg; font.pixelSize: 14 }
-                    Text { text: "Klavye renkleri Caelestia temasından alınır"; color: Colours.fgDim; font.pixelSize: 11 }
+                    StyledText { text: "Caelestia renk senkronizasyonu"; color: Colours.fg; font.pixelSize: 14 }
+                    StyledText { text: "Klavye renkleri Caelestia temasından alınır"; color: Colours.fgDim; font.pixelSize: 11 }
                 }
                 Toggle { onCheckedChanged: page.sync = checked }
             }

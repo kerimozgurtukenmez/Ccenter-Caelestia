@@ -10,22 +10,22 @@ Card {
     RowLayout {
         Layout.fillWidth: true
         spacing: 10
-        Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Nbfc.running ? "#6fd08c" : Colours.outline }
-        Text {
+        Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Nbfc.running ? Colours.success : Colours.outline }
+        StyledText {
             text: Nbfc.running ? (Nbfc.readOnly ? "Çalışıyor (salt-okunur)" : "Çalışıyor") : "Durduruldu"
             color: Colours.fg
             font { pixelSize: 15; bold: true }
         }
         Item { Layout.fillWidth: true }
-        Text { visible: Nbfc.running && isFinite(Nbfc.temp); text: "thermostat"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 20 } }
-        Text { visible: Nbfc.running && isFinite(Nbfc.temp); text: Math.round(Nbfc.temp) + "°C"; color: Colours.fg; font { pixelSize: 15; bold: true } }
+        StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: "thermostat"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 20 } }
+        StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: Math.round(Nbfc.temp) + "°C"; color: Colours.fg; font { pixelSize: 15; bold: true } }
     }
-    Text {
+    StyledText {
         Layout.fillWidth: true
         visible: Nbfc.message !== ""
         text: Nbfc.message
         wrapMode: Text.WordWrap
-        color: Nbfc.messageError ? "#f2b8b5" : Colours.fgDim
+        color: Nbfc.messageError ? Colours.error : Colours.fgDim
         font.pixelSize: 12
     }
     RowLayout {
@@ -62,6 +62,6 @@ Card {
         label: "Güvenlik sınırı (Sabit/Eğri modunda üstünde %100)"
         value: (Nbfc.safety - 70) / 30
         readout: Math.round(Nbfc.safety) + "°C"
-        onMoved: v => Nbfc.safety = Math.round(70 + v * 30)
+        onMoved: v => { Nbfc.safety = Math.round(70 + v * 30); Settings.setSafety(Nbfc.safety) }
     }
 }

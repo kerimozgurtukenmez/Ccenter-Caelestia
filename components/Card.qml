@@ -1,17 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.services
 
 Rectangle {
     id: card
     default property alias content: inner.data
     property string title: ""
-    property int pad: 16
-    property int gap: 12
+    property int pad: Tokens.padding.large
+    property int gap: Tokens.spacing.medium
 
     Layout.fillWidth: true
     Layout.preferredWidth: 1
-    radius: 20
+    radius: Tokens.rounding.largeIncreased
     color: Colours.surfaceContainer
     implicitHeight: inner.implicitHeight + pad * 2
 
@@ -20,7 +21,7 @@ Rectangle {
         anchors { fill: parent; margins: card.pad }
         spacing: card.gap
 
-        Text {
+        StyledText {
             visible: card.title !== ""
             text: card.title
             color: Colours.fgDim

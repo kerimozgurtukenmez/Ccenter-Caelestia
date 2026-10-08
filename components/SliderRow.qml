@@ -14,9 +14,9 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        Text { text: row.label; color: Colours.fg; font.pixelSize: 13 }
+        StyledText { text: row.label; color: Colours.fg; font.pixelSize: 13 }
         Item { Layout.fillWidth: true }
-        Text { text: row.readout; color: Colours.primary; font { pixelSize: 13; bold: true } }
+        StyledText { text: row.readout; color: Colours.primary; font { pixelSize: 13; bold: true } }
     }
     Slide { id: sl; Layout.fillWidth: true; onMoved: v => row.moved(v) }
 }
