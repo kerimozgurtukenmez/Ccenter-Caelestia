@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 
 Rectangle {
     id: b
@@ -25,7 +26,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 6
         Text { visible: b.icon !== ""; text: b.icon; color: b.fgc; font { family: Colours.iconFont; pixelSize: 18 } }
-        Text { text: b.text; color: b.fgc; font { pixelSize: 13; bold: true } }
+        Text { visible: b.text !== ""; text: b.text; color: b.fgc; font { pixelSize: 13; bold: true } }
     }
     MouseArea {
         id: ma

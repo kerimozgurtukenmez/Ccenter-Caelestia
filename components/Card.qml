@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 
 Rectangle {
     id: card
@@ -22,7 +23,7 @@ Rectangle {
         Text {
             visible: card.title !== ""
             text: card.title
-            color: Colours.onSurfaceVariant
+            color: Colours.fgDim
             font { pixelSize: 11; bold: true; letterSpacing: 1.2; capitalization: Font.AllUppercase }
         }
     }

@@ -2,6 +2,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.utils
 
 // nbfc-linux ile konuşan arka uç. Fan hızı ayarı root istemez; servis/config işlemleri pkexec ile yapılır.
 Singleton {
@@ -19,7 +20,6 @@ Singleton {
     property string message: ""
     property bool messageError: false
     property real safety: 90              // bu sıcaklıkta özel modlardaki fanlar %100'e çıkar
-    readonly property var temps: [45, 55, 65, 75, 85]
 
     property var targets: ({})            // fan index -> { mode, fixed, curve }  (sadece Sabit/Eğri)
     property var lastSent: ({})
@@ -34,7 +34,7 @@ Singleton {
         pump()
     }
     function pump() {
-        if (runner.running || queue.length === 0) return
+        if (runner.busy || queue.length === 0) return
         const e = queue[0]
         queue = queue.slice(1)
         runner.go(e.cmd, (code, out, err) => {
@@ -93,18 +93,37 @@ Singleton {
         }
         all.sort((a, b) => a.localeCompare(b))
         configs = all
-        const from = cfgFromDir.length > 0 ? " (/usr/share/nbfc/configs)" : cfgFromCli.length > 0 ? " (nbfc config -l)" : ""
-        configNote = (all.length > 0 ? all.length + " config" + from : "Liste alınamadı") + (cfgNoteCli !== "" ? " · " + cfgNoteCli : "")
+        const from = cfgFromDir.length > 0 ? " (" + cfgDirs + ")" : cfgFromCli.length > 0 ? " (nbfc config -l)" : ""
+        const onlyCurrent = cfgFromDir.length === 0 && cfgFromCli.length === 0
+        configNote = (all.length > 0 ? all.length + " config" + from : "Liste alınamadı")
+                   + (onlyCurrent ? " · sadece seçili config biliniyor, config klasörü bulunamadı" : "")
+                   + (cfgNoteCli !== "" && cfgFromDir.length === 0 ? " · " + cfgNoteCli : "")
     }
+    property string cfgDirs: ""
     function loadConfigs() {
-        enqueue("cfg:list", ["nbfc", "config", "-l"], (code, out, err) => {
-            console.log("[ccenter] nbfc config -l (çıkış " + code + "): " + root.lines(out).length + " satır " + err)
-            root.cfgFromCli = code === 0 ? root.lines(out) : []
-            root.cfgNoteCli = code === 0 ? "" : "nbfc config -l başarısız (kod " + code + "): " + root.firstLine(err !== "" ? err : out)
+        // stdout + stderr birlikte; bazı sürümler listeyi stderr'e ya da farklı biçimde basabiliyor
+        enqueue("cfg:list", ["sh", "-c", "nbfc config -l 2>&1"], (code, out) => {
+            const ls = root.lines(out).filter(l => !/^(usage|error|warning)/i.test(l))
+            console.log("[ccenter] nbfc config -l (çıkış " + code + "): " + ls.length + " satır; ilk: " + (ls[0] || "-"))
+            root.cfgFromCli = code === 0 ? ls : []
+            root.cfgNoteCli = code === 0 ? (ls.length === 0 ? "nbfc config -l boş döndü" : "")
+                                         : "nbfc config -l başarısız (kod " + code + "): " + root.firstLine(out)
             root.mergeConfigs()
         })
-        enqueue("cfg:dir", ["sh", "-c", 'for d in /usr/share/nbfc/configs /etc/nbfc/configs; do [ -d "$d" ] && ls -1 "$d"; done | grep "\\.json$" | sed "s/\\.json$//"'], (code, out) => {
-            root.cfgFromDir = root.lines(out)
+        // Bilinen tüm config klasörleri; satır biçimi: klasör|dosyaadı
+        enqueue("cfg:dir", ["sh", "-c",
+            'for d in /usr/share/nbfc/configs /usr/local/share/nbfc/configs /var/lib/nbfc/configs /etc/nbfc/configs /opt/nbfc/configs; do ' +
+            '[ -d "$d" ] && find "$d" -maxdepth 1 -name "*.json" -printf "$d|%f\\n"; done'], (code, out) => {
+            const names = [], dirs = []
+            for (const l of root.lines(out)) {
+                const i = l.indexOf("|")
+                if (i < 0) continue
+                const d = l.slice(0, i)
+                if (dirs.indexOf(d) < 0) dirs.push(d)
+                names.push(l.slice(i + 1).replace(/\.json$/, ""))
+            }
+            root.cfgFromDir = names
+            root.cfgDirs = dirs.join(", ")
             root.mergeConfigs()
         })
     }
@@ -171,7 +190,7 @@ Singleton {
     }
 
     function poll() {
-        if (statusCmd.running) return
+        if (statusCmd.busy) return
         statusCmd.go(["nbfc", "status", "-a"], (code, out, err) => {
             if (!root.logged) {
                 root.logged = true
@@ -193,17 +212,21 @@ Singleton {
         return isFinite(t) ? t : temp
     }
 
-    function curveAt(pts, T) {
-        const xs = temps
-        if (T <= xs[0]) return pts[0] * 100
-        for (let i = 1; i < xs.length; i++) {
-            if (T <= xs[i])
-                return (pts[i - 1] + (pts[i] - pts[i - 1]) * (T - xs[i - 1]) / (xs[i] - xs[i - 1])) * 100
+    // st.curve = [{ t: °C, s: % }] (sıcaklığa göre sıralı), st.smooth = noktalar arası düz geçiş mi
+    function curveAt(st, T) {
+        const p = st.curve
+        if (!p || p.length === 0) return NaN
+        if (T <= p[0].t) return p[0].s
+        for (let i = 1; i < p.length; i++) {
+            if (T < p[i].t) {
+                if (!st.smooth) return p[i - 1].s
+                return p[i - 1].s + (p[i].s - p[i - 1].s) * (T - p[i - 1].t) / (p[i].t - p[i - 1].t)
+            }
         }
-        return pts[pts.length - 1] * 100
+        return p[p.length - 1].s
     }
 
-    // idx = fan index, -1 = tüm fanlar. st = { mode: 0 oto | 1 sabit | 2 eğri, fixed: 0..1, curve: [0..1 x5] }
+    // idx = fan index, -1 = tüm fanlar. st = { mode: 0 oto | 1 sabit | 2 eğri, fixed: 0..1, curve: [{t,s}], smooth }
     function applyTarget(idx, st) {
         const ids = idx < 0 ? fans.map((f, i) => i) : [idx]
         const t = Object.assign({}, targets)
@@ -231,8 +254,9 @@ Singleton {
             let pct
             if (isFinite(T) && T >= safety) pct = 100
             else if (t.mode === 1) pct = t.fixed * 100
-            else if (isFinite(T)) pct = curveAt(t.curve, T)
+            else if (isFinite(T)) pct = curveAt(t, T)
             else continue
+            if (!isFinite(pct)) continue
             pct = Math.max(0, Math.min(100, Math.round(pct)))
             const last = lastSent[i]
             if (last === undefined || Math.abs(pct - last) >= 2 || (pct !== last && (pct === 0 || pct === 100))) {

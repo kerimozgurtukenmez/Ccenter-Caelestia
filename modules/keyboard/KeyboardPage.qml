@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
+import qs.services
 
 Flickable {
     id: page
@@ -64,14 +66,14 @@ Flickable {
                         Rectangle {
                             width: 34; height: 34; radius: 17
                             color: page.slotColor(index)
-                            border { width: page.slot === index ? 3 : 0; color: Colours.onSurface }
+                            border { width: page.slot === index ? 3 : 0; color: Colours.fg }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.slot = index }
                         }
                     }
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    color: Colours.onSurface
+                    color: Colours.fg
                     font { pixelSize: 13; bold: true; family: "monospace" }
                     text: page.sync ? "Caelestia'dan alınıyor"
                         : page.cur.colors === 0 ? "Bu mod renk istemiyor"
@@ -95,13 +97,13 @@ Flickable {
                         Text {
                             anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14 }
                             text: modelData.name
-                            color: page.mode === index ? Colours.onPrimary : Colours.onSurface
+                            color: page.mode === index ? Colours.fgOnPrimary : Colours.fg
                             font.pixelSize: 14
                         }
                         Text {
                             anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 12 }
                             text: modelData.colors > 0 ? modelData.colors + " renk" : "otomatik"
-                            color: page.mode === index ? Colours.onPrimary : Colours.onSurfaceVariant
+                            color: page.mode === index ? Colours.fgOnPrimary : Colours.fgDim
                             opacity: 0.75
                             font.pixelSize: 11
                         }
@@ -119,7 +121,7 @@ Flickable {
                     Layout.topMargin: 6
                     text: page.cur.hint
                     wrapMode: Text.WordWrap
-                    color: Colours.onSurfaceVariant
+                    color: Colours.fgDim
                     font.pixelSize: 11
                 }
             }
@@ -143,8 +145,8 @@ Flickable {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
-                    Text { text: "Caelestia renk senkronizasyonu"; color: Colours.onSurface; font.pixelSize: 14 }
-                    Text { text: "Klavye renkleri Caelestia temasından alınır"; color: Colours.onSurfaceVariant; font.pixelSize: 11 }
+                    Text { text: "Caelestia renk senkronizasyonu"; color: Colours.fg; font.pixelSize: 14 }
+                    Text { text: "Klavye renkleri Caelestia temasından alınır"; color: Colours.fgDim; font.pixelSize: 11 }
                 }
                 Toggle { onCheckedChanged: page.sync = checked }
             }

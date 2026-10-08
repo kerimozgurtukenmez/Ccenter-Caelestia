@@ -1,3 +1,4 @@
+import Quickshell
 import QtQuick
 
 Item {
@@ -9,10 +10,10 @@ Item {
     implicitWidth: 220
     implicitHeight: 220
 
-    // Çark önceden üretilmiş görsel (wheel.png, bu dosyayla aynı klasörde)
+    // Çark önceden üretilmiş görsel (assets/wheel.png)
     Image {
         anchors.fill: parent
-        source: "wheel.png"
+        source: Quickshell.shellPath("assets/wheel.png")
         smooth: true
         mipmap: true
     }

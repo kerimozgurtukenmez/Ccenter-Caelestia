@@ -1,4 +1,5 @@
 import QtQuick
+import qs.services
 
 Rectangle {
     id: t

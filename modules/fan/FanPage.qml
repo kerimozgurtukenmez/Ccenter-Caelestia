@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 
 Flickable {
     id: page
@@ -53,6 +54,7 @@ Flickable {
                     id: fanRep
                     model: Nbfc.fans.length
                     FanCard {
+                        Layout.alignment: Qt.AlignTop
                         name: "Fan " + (index + 1)
                         subtitle: info ? info.name : ""
                         info: Nbfc.fans[index]
