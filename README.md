@@ -12,6 +12,18 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 > - In *Fixed* and *Curve* modes the app itself drives the fans. Closing the window keeps it running in the background; quitting it hands the fans back to NBFC. If the app is killed in another way, the fans **stay at the last speed it set**; run `nbfc set -a` to return them to automatic control.
 > - Things will change and break without notice. The name is temporary too.
 
+## Screenshots
+
+| Fan control | Curve editor | Keyboard |
+|---|---|---|
+| ![Fan control](docs/screenshots/fan.png) | ![Curve editor](docs/screenshots/curve.png) | ![Keyboard lighting](docs/screenshots/keyboard.png) |
+
+The colors follow your Caelestia theme. The same app with a different wallpaper:
+
+| Fan control | Keyboard |
+|---|---|
+| ![Fan control, another theme](docs/screenshots/fan-theme2.png) | ![Keyboard, another theme](docs/screenshots/keyboard-theme2.png) |
+
 ## Features
 
 ### Fan control (via NBFC-Linux)
@@ -170,7 +182,8 @@ modules/keyboard/   keyboard tab
 components/         shared UI components
 utils/              helpers
 scripts/            sensor / hardware info scripts, tray icon helper
-assets/             icons and images
+assets/             icons and images used by the app
+docs/screenshots/   README images (not installed)
 bin/ccenter         launcher and terminal commands
 dist/               desktop entry and systemd user service
 install.sh          install into ~/.local (no sudo; asks about the keyboard permission)
