@@ -5,7 +5,9 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 > [!WARNING]
 > **This project is in a very early stage. Use it at your own risk.**
 >
-> - It is developed and tested on a single machine (HP Victus 16, Arch Linux, Hyprland). It may not work on yours.
+> - **It has only been tested on one laptop: HP Victus 16-r0xxx** (i7-13700H, RTX 3050, Arch Linux, Hyprland). It has not been tried on other HP models or on laptops from other brands, and it may not work there.
+>   - Fan control needs a working NBFC config for your exact model.
+>   - Keyboard lighting has only been tested with the single-zone RGB backlight of HP's `hp-wmi` driver.
 > - The fan section **writes fan speeds to your hardware** through NBFC. A wrong setting can make your laptop run hot. Keep an eye on temperatures.
 > - In *Fixed* and *Curve* modes the app itself drives the fans. Closing the window keeps it running in the background; quitting it hands the fans back to NBFC. If the app is killed in another way, the fans **stay at the last speed it set**; run `nbfc set -a` to return them to automatic control.
 > - Things will change and break without notice. The name is temporary too.
@@ -192,6 +194,15 @@ LICENSE             GPL-3.0
 
 Issues and feedback are welcome, but expect rough edges.
 
+## Acknowledgements
+
+Ccenter is built on top of other people's open-source work. Many thanks to the developers of:
+
+- **[Caelestia](https://github.com/caelestia-dots)**, the shell and dots this app is made for. Its colors, design tokens and overall look come from there.
+- **[Quickshell](https://quickshell.org)**, the toolkit the whole app is built with.
+- **[NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux)**, which does the actual fan control, and its contributors, whose laptop configs make fan control possible on so many machines.
+- **[Material Symbols](https://fonts.google.com/icons)**, the icons used throughout the app.
+
 ## License
 
 Copyright (C) 2026 Kerim Özgür Tükenmez
@@ -203,4 +214,4 @@ Third-party parts:
 - **[Caelestia shell](https://github.com/caelestia-dots/shell)** (GPL-3.0): Ccenter imports its QML plugin at runtime, and the transparency maths in `services/Colours.qml` is adapted from Caelestia's `Colours.qml`. Caelestia is not bundled.
 - **[Quickshell](https://quickshell.org)** (LGPL-3.0), **[nbfc-linux](https://github.com/nbfc-linux/nbfc-linux)** (GPL-3.0) and the **[Material Symbols](https://fonts.google.com/icons)** font (Apache-2.0) are used as separate programs or system fonts; they are not included in this repository.
 
-Ccenter is not affiliated with Caelestia, NBFC or any laptop vendor.
+Ccenter is made for Caelestia users, but it is an independent project: it is not made, endorsed or supported by the Caelestia, Quickshell or NBFC developers, or by any laptop vendor. Please report problems with Ccenter here, not to them.
