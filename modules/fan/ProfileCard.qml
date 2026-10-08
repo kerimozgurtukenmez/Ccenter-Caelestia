@@ -7,15 +7,14 @@ import qs.services
 Card {
     id: card
     title: "Profiller"
-    required property var page               // FanPage: builtins, applyProfile(), snapshot()
 
     readonly property string cfgId: Nbfc.configId
     readonly property var custom: Settings.profilesOf(cfgId)
     readonly property string active: Settings.activeOf(cfgId)
-    readonly property var all: page.builtins.map(p => Object.assign({ builtin: true }, p))
+    readonly property var all: FanState.builtins.map(p => Object.assign({ builtin: true }, p))
                                    .concat(custom.map(p => Object.assign({ builtin: false, icon: "tune" }, p)))
     readonly property string newName: nameInput.text.trim()
-    readonly property bool nameTaken: page.builtins.some(p => p.name === newName)
+    readonly property bool nameTaken: FanState.builtins.some(p => p.name === newName)
     property string confirmDelete: ""        // silmek için ikinci tık
 
     StyledText {
@@ -73,7 +72,7 @@ Card {
                         console.log("[ccenter] profil butonu: " + chip.modelData.name)
                         if (chip.deleting) { card.confirmDelete = ""; return }   // silmekten vazgeç
                         card.confirmDelete = ""
-                        console.log("[ccenter] " + card.page.applyByName(chip.modelData.name))
+                        console.log("[ccenter] " + FanState.applyByName(chip.modelData.name, false))
                     }
                 }
                 MouseArea {
@@ -173,7 +172,7 @@ Card {
             opacity: enabled ? 1 : 0.4
             onClicked: {
                 if (!enabled) return
-                Settings.saveProfile(card.cfgId, card.page.snapshot(card.newName))
+                Settings.saveProfile(card.cfgId, FanState.snapshot(card.newName))
                 Settings.setActive(card.cfgId, card.newName)
                 nameInput.text = ""
             }
