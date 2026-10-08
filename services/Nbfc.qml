@@ -62,8 +62,13 @@ Singleton {
     }
 
     // ---------- servis ----------
-    function startService() { sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), "Yönetici izni bekleniyor…") }
-    function stopService() { sudo(["nbfc", "stop"], "Yönetici izni bekleniyor…") }
+    property bool userStopped: false         // servisi kullanıcı durdurduysa "beklenmedik durdu" bildirimi gitmez
+    signal serviceLost()                     // çalışan servis beklenmedik şekilde durdu
+    signal commandFailed(string msg)         // fan hızı yazılamadı
+    signal boostEnded()                      // süreli maksimum fan bitti
+
+    function startService() { userStopped = false; sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), "Yönetici izni bekleniyor…") }
+    function stopService() { userStopped = true; sudo(["nbfc", "stop"], "Yönetici izni bekleniyor…") }
     function restartService(ro) { sudo(["nbfc", "restart"].concat(ro ? ["-r"] : []), "Yönetici izni bekleniyor…") }
     function setReadOnly(v) {
         const was = root.running
@@ -231,10 +236,15 @@ Singleton {
                 root.logged = true
                 console.log("[ccenter] nbfc status -a (çıkış " + code + "):\n" + out + err)
             }
+            const was = root.running
             root.running = code === 0
+            if (was && !root.running && !root.userStopped && !root.quitting) root.serviceLost()
             if (code === 0) {
+                root.userStopped = false
                 root.applyStatus(root.parseStatus(out))
+                root.checkBoost()
                 root.control()
+                root.record()
             } else {
                 root.temp = NaN
             }
@@ -244,6 +254,9 @@ Singleton {
     // ---------- fan kontrolü ----------
     // Sabit/Eğri modunda fan varsa sensörler pencere kapalıyken de okunur (güvenlik sınırı GPU'yu da izlesin)
     readonly property bool needsSensors: Object.keys(targets).length > 0
+    // Ccenter fanları kontrol ediyor mu (Sabit/Eğri/maksimum): öyleyse sık okunur
+    readonly property bool controlling: needsSensors || boosting
+    property bool uiVisible: true             // pencere açık mı (shell.qml bağlar); gizliyken sakin tempo
 
     // NBFC'nin bu fan için okuduğu sıcaklık (config'teki sensör; bu makinede CPU)
     function tempOf(i) {
@@ -298,6 +311,7 @@ Singleton {
             if (st.mode === 0) delete t[i]; else t[i] = st
         }
         targets = t
+        if (boosting) return                         // maksimum fan bitince her fan kendi ayarına döner
         if (st.mode === 0) {
             enqueue(idx < 0 ? "auto:all" : "auto:" + idx,
                     idx < 0 ? ["nbfc", "set", "-a"] : ["nbfc", "set", "-f", String(idx), "-a"], null)
@@ -310,6 +324,11 @@ Singleton {
     function control() {
         if (!root.running || readOnly || quitting) return
         for (let i = 0; i < fans.length; i++) {
+            if (boosting) {                          // maksimum fan: tüm fanlar %100
+                if (fans[i].auto) lastSent[i] = undefined
+                if (lastSent[i] !== 100) { lastSent[i] = 100; send(i, 100) }
+                continue
+            }
             const t = targets[i]
             if (!t) continue
             if (fans[i].auto) lastSent[i] = undefined   // servis auto'ya dönmüşse yeniden yaz
@@ -325,9 +344,50 @@ Singleton {
             const last = lastSent[i]
             if (last === undefined || Math.abs(pct - last) >= 2 || (pct !== last && (pct === 0 || pct === 100))) {
                 lastSent[i] = pct
-                enqueue("spd:" + i, ["nbfc", "set", "-f", String(i), "-s", String(pct)], null)
+                send(i, pct)
             }
         }
+    }
+    property double lastFailNote: 0
+    function send(i, pct) {
+        enqueue("spd:" + i, ["nbfc", "set", "-f", String(i), "-s", String(pct)], (code, out, err) => {
+            if (code === 0) return
+            root.lastSent[i] = undefined             // sonraki turda yeniden dener
+            root.commandFailed("Fan " + (i + 1) + " hızı yazılamadı: " + root.firstLine(err !== "" ? err : out))
+        })
+    }
+
+    // ---------- maksimum fan ----------
+    // boostUntil: 0 kapalı, -1 süresiz, >0 bitiş zamanı (ms)
+    property double boostUntil: 0
+    readonly property bool boosting: boostUntil !== 0
+    function setBoost(minutes) {
+        if (minutes > 0) boostUntil = Date.now() + minutes * 60000
+        else if (minutes < 0) boostUntil = -1
+        else if (boosting) {
+            boostUntil = 0
+            // her fan kendi ayarına: kaydı olmayanlar NBFC otomatiğe, Sabit/Eğri olanlar yeniden hesaplanır
+            for (let i = 0; i < fans.length; i++) {
+                lastSent[i] = undefined
+                level[i] = undefined
+                if (!targets[i]) enqueue("auto:" + i, ["nbfc", "set", "-f", String(i), "-a"], null)
+            }
+        }
+        control()
+    }
+    function checkBoost() {
+        if (boostUntil > 0 && Date.now() >= boostUntil) { setBoost(0); boostEnded() }
+    }
+
+    // ---------- geçmiş (son 10 dk, her durum okumasında bir örnek) ----------
+    property var history: []                 // [{ t: ms, cpu: °C, gpu: °C|NaN, fan: % (ortalama) }]
+    readonly property int historyMs: 600000
+    function record() {
+        const now = Date.now()
+        const fanAvg = fans.length ? fans.reduce((a, f) => a + f.current, 0) / fans.length : NaN
+        const h = history.filter(x => now - x.t <= historyMs)
+        h.push({ t: now, cpu: temp, gpu: Sensors.gpu, fan: fanAvg })
+        history = h
     }
 
     // Uygulamayı tamamen kapat: önce kontrol ettiğimiz fanları NBFC'nin otomatik kontrolüne geri ver
@@ -335,8 +395,9 @@ Singleton {
     function releaseAndQuit() {
         if (quitting) return
         quitting = true
-        const owned = Object.keys(targets).length > 0
+        const owned = Object.keys(targets).length > 0 || boosting
         targets = ({})
+        boostUntil = 0
         if (owned && running) enqueue("quit", ["nbfc", "set", "-a"], () => Qt.quit())
         else Qt.quit()
     }
@@ -344,7 +405,8 @@ Singleton {
     // ---------- altyapı ----------
     Cmd { id: runner }
     Cmd { id: statusCmd }
-    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
+    // Pencere açıkken ya da fan kontrol ederken 2 sn; gizli ve her şey NBFC'deyken 5 sn
+    Timer { interval: root.uiVisible || root.controlling ? 2000 : 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
 
     FileView {
         path: "/etc/nbfc/nbfc.json"

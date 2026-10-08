@@ -8,11 +8,21 @@ import qs.utils
 Singleton {
     id: root
     property bool active: true
+    // fast: pencere açık ya da Ccenter fan kontrol ediyor -> 3 sn'de bir, GPU her turda.
+    // Değilse 5 sn'de bir ve GPU (nvidia-smi, pahalı) 4 turda bir (~20 sn).
+    property bool fast: true
+    property int tick: 0
+    property real lastNv: NaN
+    property string lastNvNote: ""
     property var readings: []     // [{ label, model, value (°C ya da NaN), note }]
     property var hw: ({ cpu: "", cores: "", gpu: "", igpu: "" })
     // Fan kontrolü için: harici GPU sıcaklığı (uykuda / yoksa NaN)
     readonly property real gpu: { const r = readings.find(x => x.label === "GPU"); return r ? r.value : NaN }
     readonly property bool hasGpu: readings.some(x => x.label === "GPU")
+    // Fan RPM: sürücü bir kez bile 0'dan büyük değer verdiyse güvenilir sayılır (bazı sürücüler hep 0 döndürür)
+    property var rpms: []                    // fan sırasıyla (fan1 -> 0)
+    property bool rpmWorks: false
+    function rpm(i) { return rpmWorks && i < rpms.length ? rpms[i] : NaN }
 
     // "13th Gen Intel(R) Core(TM) i7-13700H" -> "Intel Core i7-13700H"
     function cleanCpu(n) {
@@ -43,13 +53,20 @@ Singleton {
     function parse(txt) {
         let pkg = NaN, coreMax = NaN, amdCpu = NaN, acpi = NaN
         let nv = NaN, nvNote = "", hasNv = false, amdGpu = NaN, igpu = NaN
+        let fanDrv = "", fanRpm = []
         for (const line of txt.split("\n")) {
             const p = line.split("|")
+            if (p[0] === "fan" && p.length === 4) {
+                if (fanDrv === "") fanDrv = p[1]          // ilk fan sürücüsü (hp, thinkpad, dell_smm…)
+                if (p[1] === fanDrv) fanRpm[parseInt(p[2]) - 1] = parseInt(p[3])
+                continue
+            }
             if (p.length !== 3) continue
             const n = p[0], l = p[1].toLowerCase(), raw = p[2]
             if (n === "nvidia" || n === "nouveau") {
                 hasNv = true
-                if (raw === "uyku") nvNote = "Uykuda"
+                if (raw === "atla") { nv = lastNv; nvNote = lastNvNote }    // bu tur okunmadı: son değer
+                else if (raw === "uyku") nvNote = "Uykuda"
                 else nv = Math.max(isFinite(nv) ? nv : -1, parseInt(raw) / 1000)
                 continue
             }
@@ -75,16 +92,21 @@ Singleton {
         if (hasNv || isFinite(gpu) || hw.gpu !== "") out.push({ label: "GPU", model: hw.gpu, extra: "", value: gpu, note: nvNote })
         if (isFinite(igpu) || hw.igpu !== "")
             out.push({ label: "iGPU", model: hw.igpu, extra: "", value: igpu, note: isFinite(igpu) ? "" : "Sensör yok" })
+        if (hasNv) { lastNv = nv; lastNvNote = nvNote }   // "atla" turlarında bu değer kullanılır
         readings = out
+        rpms = Array.from(fanRpm, v => isFinite(v) ? v : NaN)
+        if (rpms.some(v => v > 0)) rpmWorks = true
     }
 
     function poll() {
         if (cmd.busy) return
-        cmd.go(["sh", Quickshell.shellPath("scripts/sensors.sh")], (code, out) => root.parse(out))
+        const gpu = fast || tick % 4 === 0
+        tick++
+        cmd.go(["sh", Quickshell.shellPath("scripts/sensors.sh")].concat(gpu ? ["gpu"] : []), (code, out) => root.parse(out))
     }
 
     Cmd { id: cmd }
     Cmd { id: hwCmd }
     Component.onCompleted: hwCmd.go(["sh", Quickshell.shellPath("scripts/hwinfo.sh")], (code, out) => root.parseHw(out))
-    Timer { interval: 3000; running: root.active; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
+    Timer { interval: root.fast ? 3000 : 5000; running: root.active; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
 }

@@ -92,6 +92,14 @@ Singleton {
         edit(d => { slot(d, id).active = name })
     }
 
+    // Bildirim ayarları (varsayılan: açık)
+    function notifyOn(key) { return !(data.notify && data.notify[key] === false) }
+    function setNotify(key, v) { edit(d => { if (!d.notify || typeof d.notify !== "object") d.notify = {}; d.notify[key] = v === true }) }
+
+    // Arayüz seçenekleri (varsayılan: açık), ör. "tray"
+    function uiOn(key) { return !(data.ui && data.ui[key] === false) }
+    function setUi(key, v) { edit(d => { if (!d.ui || typeof d.ui !== "object") d.ui = {}; d.ui[key] = v === true }) }
+
     function safety() {
         const s = num(data.safety, 70, 100)
         return isFinite(s) ? s : NaN

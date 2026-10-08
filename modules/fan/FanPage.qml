@@ -76,7 +76,7 @@ Flickable {
     }
     // ---------- terminal (IPC) ----------
     function allProfiles() { return builtins.concat(Settings.profilesOf(Nbfc.configId)) }
-    function applyByName(name) {
+    function applyByName(name, fromIpc) {
         const key = String(name).trim().toLocaleLowerCase()
         const p = allProfiles().find(x => x.name.toLocaleLowerCase() === key)
         if (!p) return "Profil bulunamadı: " + name + "\n" + profileList()
@@ -84,6 +84,7 @@ Flickable {
         if (!Nbfc.running) return "NBFC servisi çalışmıyor"
         if (Nbfc.readOnly) return "NBFC salt-okunur modda, fan hızı yazılamaz"
         applyProfile(p)
+        if (fromIpc && Notify.profiles) Notify.send("Fan profili: " + p.name, "", "low", "dialog-information")
         return "Uygulandı: " + p.name
     }
     function profileList() {
@@ -130,6 +131,7 @@ Flickable {
         spacing: 12
 
         TempCard {}
+        HistoryCard {}
         ServiceCard {}
         ConfigCard {}
 
@@ -195,6 +197,7 @@ Flickable {
             }
         }
 
+        NotifyCard {}
         BackgroundCard {}
     }
 }
