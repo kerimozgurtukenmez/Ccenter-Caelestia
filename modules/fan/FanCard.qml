@@ -55,11 +55,24 @@ Card {
             StyledText { text: fan.name; color: Colours.fg; font { pixelSize: 15; bold: true } }
             StyledText { Layout.fillWidth: true; text: fan.subtitle; elide: Text.ElideRight; color: Colours.fgDim; font.pixelSize: 11 }
         }
-        StyledText {
+        ColumnLayout {
             visible: !fan.isGlobal
-            text: fan.info ? Math.round(fan.info.current) + "%" : "—"
-            color: Colours.primary
-            font { pixelSize: 13; bold: true }
+            spacing: 0
+            StyledText {
+                Layout.alignment: Qt.AlignRight
+                text: fan.info ? Math.round(fan.info.current) + "%" : "—"
+                color: Colours.primary
+                font { pixelSize: 13; bold: true }
+            }
+            // Gerçek RPM: sadece sürücü güvenilir değer veriyorsa (bazı modellerde hep 0)
+            StyledText {
+                readonly property real rpm: Sensors.rpm(fan.fanIndex)
+                visible: isFinite(rpm)
+                Layout.alignment: Qt.AlignRight
+                text: Math.round(rpm) + " RPM"
+                color: Colours.fgDim
+                font.pixelSize: 10
+            }
         }
         Toggle { id: tog; visible: fan.isGlobal }
     }

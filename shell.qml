@@ -57,7 +57,31 @@ ShellRoot {
         }
     }
 
-    Binding { target: Sensors; property: "active"; value: (win.visible && win.tab === 0) || Nbfc.needsSensors }
+    // Sensörler: Fan sekmesi açıkken, Ccenter fan kontrol ederken ya da bildirimler açıkken (kritik sıcaklık için) okunur
+    Binding { target: Sensors; property: "active"; value: (win.visible && win.tab === 0) || Nbfc.needsSensors || Notify.enabled }
+    // Olay izleyici (kritik sıcaklık, servis durdu… bildirimleri)
+    readonly property var alerts: Alerts
+    // Tempo: pencere açıkken ya da fan kontrol ederken hızlı, değilse sakin (performans)
+    Binding { target: Nbfc; property: "uiVisible"; value: win.visible }
+    Binding { target: Sensors; property: "fast"; value: win.visible || Nbfc.controlling }
+
+    // Sistem tepsisi (Caelestia barı): sol tık pencereyi açar/gizler, menüde profiller ve maksimum fan
+    Binding { target: Tray; property: "windowVisible"; value: win.visible }
+    Binding { target: Tray; property: "profiles"; value: fanPage.allProfiles().map(p => p.name) }
+    Binding { target: Tray; property: "active"; value: Settings.activeOf(Nbfc.configId) }
+    Binding { target: Tray; property: "boost"; value: Nbfc.boosting }
+    Binding {
+        target: Tray; property: "tooltip"
+        value: (Settings.activeOf(Nbfc.configId) || "Özel ayarlar")
+               + (isFinite(Nbfc.temp) ? " · CPU " + Math.round(Nbfc.temp) + "°C" : "")
+               + (isFinite(Sensors.gpu) ? " · GPU " + Math.round(Sensors.gpu) + "°C" : "")
+               + (Nbfc.boosting ? " · Maksimum fan" : "")
+    }
+    Connections {
+        target: Tray
+        function onToggleRequested() { win.visible = !win.visible }
+        function onProfileRequested(name) { fanPage.applyByName(name, false) }
+    }
 
     // Terminalden kontrol: qs -c Ccenter ipc call cc <komut> [argüman]
     IpcHandler {
@@ -68,7 +92,12 @@ ShellRoot {
         // Tamamen kapat: kontrol edilen fanlar NBFC'nin otomatik kontrolüne döner
         function quit(): void { Nbfc.releaseAndQuit() }
         // Profil uygular (arayüzdeki butonla aynı kod). Büyük/küçük harf fark etmez.
-        function profile(name: string): string { return fanPage.applyByName(name) }
+        function profile(name: string): string { return fanPage.applyByName(name, true) }
+        // Maksimum fan: dakika (0 = kapat, -1 = süresiz)
+        function boost(minutes: int): string {
+            Nbfc.setBoost(minutes)
+            return minutes === 0 ? "Maksimum fan kapatıldı" : "Maksimum fan açık" + (minutes > 0 ? " (" + minutes + " dk)" : " (süresiz)")
+        }
         function profiles(): string { return fanPage.profileList() }
         function status(): string { return fanPage.statusText() }
     }

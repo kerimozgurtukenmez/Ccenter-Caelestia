@@ -22,6 +22,12 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 - Per-fan temperature source in Curve mode (CPU, GPU or the hotter one)
 - Hysteresis and gradual slow-down in Curve mode, so fans don't keep revving up and down
 - Shows your NBFC config's own fan curve and lets you copy it into an editable curve
+- Max fan button (5 min, 15 min or until turned off)
+- Last 10 minutes graph of CPU/GPU temperature and fan speed
+- Desktop notifications through Caelestia: critical temperature, NBFC service stopped, fan speed could not be set, max fan ended, profile switched from a keybind (can be turned off)
+- Real fan RPM when the driver reports it
+- Tray icon in the Caelestia bar: click to show/hide, hover for profiles, max fan and quit
+- Light on resources: ~0.5% CPU in the background when NBFC is in control
 - Settings are saved in `~/.config/ccenter/settings.json`
 - Safety limit: above 90 °C, fans in Fixed/Curve mode go to 100%
 - NBFC service controls (start / stop / restart, read-only mode, start on boot) and config selection
@@ -42,7 +48,7 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 - [nbfc-linux](https://github.com/nbfc-linux/nbfc-linux) with a working config for your laptop
 - A polkit agent (service and config actions use `pkexec`)
 - [Material Symbols Rounded](https://fonts.google.com/icons) font
-- Optional: `nvidia-smi` (NVIDIA GPU temperature), `lspci` (GPU names)
+- Optional: `python-gobject` (tray icon in the Caelestia bar), `nvidia-smi` (NVIDIA GPU temperature), `lspci` (GPU names)
 
 ## Installation
 
@@ -64,6 +70,7 @@ Always start it with `-n` (no duplicate): two running copies would fight over th
 qs -c Ccenter ipc call cc status            # fans, temperatures, active profile
 qs -c Ccenter ipc call cc profiles          # list profiles (* = active)
 qs -c Ccenter ipc call cc profile Sessiz    # apply a profile (case-insensitive)
+qs -c Ccenter ipc call cc boost 15          # max fan for 15 minutes (0 = off, -- -1 = until turned off)
 qs -c Ccenter ipc call cc open              # open the window (also: hide, toggle)
 qs -c Ccenter ipc call cc quit              # quit; fans go back to NBFC auto
 ```

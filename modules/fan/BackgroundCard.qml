@@ -16,6 +16,14 @@ Card {
         enabled: !Autostart.busy
         onToggled: v => Autostart.setEnabled(v)
     }
+    ToggleRow {
+        icon: "dock_to_left"
+        label: "Sistem tepsisinde göster"
+        sub: "Barda ikon: tıkla aç/gizle, üzerine gel: profiller, maksimum fan, kapat"
+        controlled: true
+        checked: Tray.enabled
+        onToggled: v => Settings.setUi("tray", v)
+    }
     StyledText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap

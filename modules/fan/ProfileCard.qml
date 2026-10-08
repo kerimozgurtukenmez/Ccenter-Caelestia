@@ -96,6 +96,44 @@ Card {
         }
     }
 
+    // Maksimum fan: tüm fanlar %100, süre dolunca her fan kendi ayarına döner
+    property double now: Date.now()
+    Timer { running: Nbfc.boostUntil > 0; interval: 1000; repeat: true; triggeredOnStart: true; onTriggered: card.now = Date.now() }
+    function left() {
+        const s = Math.max(0, Math.round((Nbfc.boostUntil - now) / 1000))
+        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
+    }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+        StyledText {
+            text: "air"
+            color: Nbfc.boosting ? Colours.error : Colours.primary
+            font { family: Colours.iconFont; pixelSize: 22 }
+        }
+        StyledText {
+            Layout.fillWidth: true
+            text: Nbfc.boosting ? "Maksimum fan açık" + (Nbfc.boostUntil > 0 ? " · " + card.left() + " kaldı" : "") : "Maksimum fan"
+            color: Nbfc.boosting ? Colours.error : Colours.fg
+            font { pixelSize: 13; bold: Nbfc.boosting }
+        }
+        Repeater {
+            model: Nbfc.boosting ? [] : [{ t: "5 dk", m: 5 }, { t: "15 dk", m: 15 }, { t: "Süresiz", m: -1 }]
+            Btn {
+                required property var modelData
+                text: modelData.t
+                onClicked: Nbfc.setBoost(modelData.m)
+            }
+        }
+        Btn {
+            visible: Nbfc.boosting
+            icon: "close"
+            text: "Kapat"
+            filled: true
+            onClicked: Nbfc.setBoost(0)
+        }
+    }
+
     // Mevcut ayarları profil olarak kaydet
     RowLayout {
         Layout.fillWidth: true

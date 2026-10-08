@@ -27,6 +27,8 @@ Singleton {
     property color error: "#f2b8b5"
     property color success: "#b5ccba"
     property color warning: "#ffcc80"
+    property color tertiary: "#efb8c8"
+    property color sky: "#89dceb"
     property bool light: false
     readonly property string iconFont: "Material Symbols Rounded"
     readonly property string fontFamily: Tokens.font.body.small.family
@@ -62,7 +64,7 @@ Singleton {
     // property adı -> scheme.json'daki anahtar (olmayan anahtar atlanır, varsayılan kalır)
     readonly property var keys: ({
         primary: "primary", fgOnPrimary: "onPrimary", fg: "onSurface", fgDim: "onSurfaceVariant",
-        outline: "outlineVariant", error: "error", success: "success", warning: "yellow"
+        outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", sky: "sky"
     })
     readonly property var rawKeys: ({
         surface: "surface", surfaceContainer: "surfaceContainer", surfaceContainerHigh: "surfaceContainerHigh"
