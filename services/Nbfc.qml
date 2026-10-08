@@ -395,6 +395,10 @@ Singleton {
     function releaseAndQuit() {
         if (quitting) return
         quitting = true
+        // Önce klavye efektini sabit renge döndür (yarıda karanlık kalmasın), sonra fanları bırak
+        Keyboard.restoreForQuit(() => root.releaseFansAndQuit())
+    }
+    function releaseFansAndQuit() {
         const owned = Object.keys(targets).length > 0 || boosting
         targets = ({})
         boostUntil = 0

@@ -36,7 +36,10 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 ### Keyboard lighting
 - Change the keyboard **color** (color wheel, presets, or your Caelestia theme color) and **brightness**
 - Works with the kernel's keyboard backlight interface (`/sys/class/leds/*::kbd_backlight`); single-zone RGB (the whole keyboard is one color) or brightness only on non-RGB keyboards
-- Effects (breathing, rainbow, …) are not there yet
+- **Breathing effect**: the light fades in and out with your color, cycles through up to 6 colors of your choice, or uses your Caelestia theme colors (follows theme changes). Adjustable speed and lowest/highest level; with a lowest level above 0 the light never goes dark and the colors flow into each other. Keeps running when the window is closed and resumes after a restart
+- **Color cycle effect**: the light flows smoothly between your colors (or the Caelestia theme colors) without dimming
+- Caelestia colors: 3 to 6 colors taken from your current theme, picked so they look different from each other
+- More effects (rainbow, …) are not there yet
 
 ### Caelestia integration
 - Colors follow Caelestia's scheme (`~/.local/state/caelestia/scheme.json`) live.
@@ -90,7 +93,7 @@ Your settings in `~/.config/ccenter` are kept; delete that folder too if you wan
 ### Running in the background
 - Closing the window does **not** quit Ccenter; it keeps controlling the fans in the background. Open it again from the launcher, the tray icon or with `ccenter`.
 - To quit completely, use the "Quit" button in the app, the tray menu or `ccenter quit`. Fans that Ccenter was controlling are handed back to NBFC's automatic control first.
-- "Start in background on login" in the app enables the systemd user service. When the service stops or crashes, fans are handed back to NBFC (`nbfc set -a`).
+- "Start in background on login" in the app enables the systemd user service. Stopping the service quits Ccenter the same way as "Quit" (keyboard effect back to your static color, fans back to NBFC); if it crashes, fans are still handed back to NBFC (`nbfc set -a`).
 - Only one copy of Ccenter runs at a time. `ccenter` refuses to start a second copy, because two copies would fight over the fans.
 
 ### Terminal control
@@ -103,6 +106,11 @@ ccenter profile Sessiz      # apply a profile (case-insensitive)
 ccenter boost 15            # max fan for 15 minutes (0 = off, -1 = until turned off)
 ccenter kbd color "#ff0000" # keyboard color
 ccenter kbd brightness 50   # keyboard brightness in percent (0 = off)
+ccenter kbd effect cycle    # keyboard effect: static | breathing | cycle
+ccenter kbd source theme    # breathing colors: single | multi | theme (Caelestia)
+ccenter kbd speed 60        # effect speed 0-100
+ccenter kbd range 20 80     # breathing lowest and highest level in percent
+ccenter kbd themecount 5    # number of Caelestia colors (3-6)
 ccenter hide                # also: open, toggle
 ccenter quit                # quit; fans go back to NBFC auto
 ccenter --help
@@ -151,7 +159,9 @@ Makefile            install / uninstall
 - [x] Profiles, background mode, tray icon, notifications
 - [x] System-wide installation (`make install`)
 - [x] Keyboard color and brightness
-- [ ] Keyboard effects (breathing, rainbow, …)
+- [x] Keyboard breathing effect (one color, several colors or Caelestia theme colors)
+- [x] Keyboard color cycle effect
+- [ ] More keyboard effects (rainbow, …)
 - [ ] Keep the keyboard color in sync with the Caelestia theme automatically (one-click theme color is already there)
 - [ ] English UI
 

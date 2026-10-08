@@ -28,7 +28,12 @@ Singleton {
     property color success: "#b5ccba"
     property color warning: "#ffcc80"
     property color tertiary: "#efb8c8"
+    property color secondary: "#ccc2dc"
     property color sky: "#89dceb"
+    // Temanın vurgu renkleri (duvar kağıdına göre renklendirilmiş; klavye efektleri için renk havuzu)
+    property var accents: []
+    readonly property var accentKeys: ["mauve", "pink", "red", "maroon", "peach", "yellow", "green", "teal",
+                                       "sky", "sapphire", "blue", "lavender", "flamingo", "rosewater"]
     property bool light: false
     readonly property string iconFont: "Material Symbols Rounded"
     readonly property string fontFamily: Tokens.font.body.small.family
@@ -64,7 +69,7 @@ Singleton {
     // property adı -> scheme.json'daki anahtar (olmayan anahtar atlanır, varsayılan kalır)
     readonly property var keys: ({
         primary: "primary", fgOnPrimary: "onPrimary", fg: "onSurface", fgDim: "onSurfaceVariant",
-        outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", sky: "sky"
+        outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", secondary: "secondary", sky: "sky"
     })
     readonly property var rawKeys: ({
         surface: "surface", surfaceContainer: "surfaceContainer", surfaceContainerHigh: "surfaceContainerHigh"
@@ -84,6 +89,7 @@ Singleton {
                 if (c[root.keys[k]]) root[k] = "#" + c[root.keys[k]]
             for (const k in root.rawKeys)
                 if (c[root.rawKeys[k]]) raw[k] = "#" + c[root.rawKeys[k]]
+            root.accents = root.accentKeys.filter(k => c[k]).map(k => "#" + c[k])
         }
     }
 
