@@ -5,6 +5,8 @@ import QtQuick
 Process {
     id: p
     property var done: null
+    // running, `running = true` atamasından hemen sonra true olmayabiliyor; meşguliyet için bunu kullan
+    property bool busy: false
     property int code: -1
     property bool gotExit: false
     property bool gotOut: false
@@ -18,10 +20,12 @@ Process {
         if (!gotExit || !gotOut || !gotErr) return
         const cb = done
         done = null
+        busy = false
         if (cb) cb(code, so.text, se.text)
     }
     function go(cmd, cb) {
         done = cb
+        busy = true
         gotExit = false; gotOut = false; gotErr = false; code = -1
         command = cmd
         running = true

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 
 Rectangle {
     id: btn
@@ -27,13 +28,13 @@ Rectangle {
                 anchors.centerIn: parent
                 text: btn.icon
                 font { family: Colours.iconFont; pixelSize: 28 }
-                color: btn.active ? Colours.onPrimary : Colours.primary
+                color: btn.active ? Colours.fgOnPrimary : Colours.primary
             }
         }
         ColumnLayout {
             spacing: 2
-            Text { text: btn.label; font { pixelSize: 16; bold: true } color: btn.active ? Colours.onPrimary : Colours.onSurface }
-            Text { text: btn.sub; font.pixelSize: 12; color: btn.active ? Colours.onPrimary : Colours.onSurfaceVariant; opacity: 0.75 }
+            Text { text: btn.label; font { pixelSize: 16; bold: true } color: btn.active ? Colours.fgOnPrimary : Colours.fg }
+            Text { text: btn.sub; font.pixelSize: 12; color: btn.active ? Colours.fgOnPrimary : Colours.fgDim; opacity: 0.75 }
         }
         Item { Layout.fillWidth: true }
     }

@@ -1,4 +1,5 @@
 import QtQuick
+import qs.services
 
 Item {
     id: s
@@ -21,6 +22,7 @@ Item {
     }
     MouseArea {
         anchors.fill: parent
+        preventStealing: true
         cursorShape: Qt.PointingHandCursor
         function upd(m) {
             const v = s.vertical ? 1 - m.y / height : m.x / width

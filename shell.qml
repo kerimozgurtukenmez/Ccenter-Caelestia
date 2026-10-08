@@ -2,6 +2,10 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import qs.components
+import qs.modules.fan
+import qs.modules.keyboard
+import qs.services
 
 ShellRoot {
     // FloatingWindow = normal xdg pencere (Hyprland tile'lar). PanelWindow layer-shell'dir, tile olmaz.

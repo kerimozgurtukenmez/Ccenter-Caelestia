@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
+import qs.services
 
 Card {
     id: fan
@@ -10,10 +12,11 @@ Card {
     property alias globalOn: tog.checked
     property var info: null                  // Nbfc.fans[i] (global kartta null)
     property bool synced: false
-    property var curve: [0.2, 0.4, 0.6, 0.8, 1.0]
+    property bool smoothCurve: true
+    property var curve: [{ t: 45, s: 20 }, { t: 55, s: 40 }, { t: 65, s: 60 }, { t: 75, s: 80 }, { t: 85, s: 100 }]
     readonly property bool allowed: isGlobal ? tog.checked : active
     // mode: 0 Otomatik, 1 Sabit, 2 Eğri
-    readonly property var st: ({ mode: mode.current, fixed: fixedRow.value, curve: fan.curve })
+    readonly property var st: ({ mode: mode.current, fixed: fixedRow.value, curve: fan.curve, smooth: fan.smoothCurve })
     signal edited()                          // kullanıcı bir şeyi değiştirdi (400 ms bekleyip bir kez)
 
     function touch() { debounce.restart() }
@@ -72,42 +75,14 @@ Card {
             onMoved: fan.touch()
         }
 
-        ColumnLayout {
+        CurveEditor {
             visible: mode.current === 2
             Layout.fillWidth: true
-            spacing: 6
-            RowLayout {
-                Layout.fillWidth: true
-                Text { text: "Sıcaklık eğrisi"; color: Colours.fg; font.pixelSize: 13 }
-                Item { Layout.fillWidth: true }
-                Text { text: "°C → hız %"; color: Colours.fgDim; font.pixelSize: 11 }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                Repeater {
-                    model: Nbfc.temps
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        spacing: 6
-                        Text { Layout.alignment: Qt.AlignHCenter; text: Math.round(bar.value * 100) + "%"; color: Colours.fgDim; font.pixelSize: 11 }
-                        Slide {
-                            id: bar
-                            vertical: true
-                            Layout.alignment: Qt.AlignHCenter
-                            value: fan.curve[index]
-                            onMoved: v => {
-                                const a = fan.curve.slice()
-                                a[index] = v
-                                fan.curve = a
-                                fan.touch()
-                            }
-                        }
-                        Text { Layout.alignment: Qt.AlignHCenter; text: modelData + "°"; color: Colours.fg; font { pixelSize: 12; bold: true } }
-                    }
-                }
-            }
+            points: fan.curve
+            smoothCurve: fan.smoothCurve
+            liveTemp: fan.info && isFinite(fan.info.temp) ? fan.info.temp : Nbfc.temp
+            onEdited: pts => { fan.curve = pts; fan.touch() }
+            onSmoothPicked: v => { fan.smoothCurve = v; fan.touch() }
         }
     }
 }
