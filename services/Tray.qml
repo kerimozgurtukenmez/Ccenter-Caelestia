@@ -8,8 +8,8 @@ import QtQuick
 Singleton {
     id: root
     readonly property bool enabled: Settings.uiOn("tray")
-    // GEÇİCİ ikon: kullanıcının resmi (projeye kopyalanmaz, sadece okunur). Yoksa sistem ikonu kullanılır.
-    readonly property string iconFile: Quickshell.env("HOME") + "/Pictures/147867415_p0.jpg"
+    // Tepsi ikonu: uygulama ikonu (yüklenemezse tema ikonu "ccenter")
+    readonly property string iconFile: Quickshell.shellPath("assets/ccenter.svg")
 
     // shell.qml bağlar
     property bool windowVisible: true
@@ -29,8 +29,7 @@ Singleton {
     Process {
         id: proc
         running: root.enabled
-        // Kullanıcı resmi yoksa uygulama ikonu (assets/ccenter.svg)
-        command: ["python3", Quickshell.shellPath("scripts/tray.py"), root.iconFile, Quickshell.shellPath("assets/ccenter.svg")]
+        command: ["python3", Quickshell.shellPath("scripts/tray.py"), root.iconFile]
         stdinEnabled: true
         onStarted: root.push()
         stdout: SplitParser {

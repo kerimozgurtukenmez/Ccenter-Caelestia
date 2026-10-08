@@ -1,0 +1,5 @@
+# Ccenter: klavye ışığının rengini ve parlaklığını root olmadan ayarlayabilmek için yazma izni.
+# Sadece *::kbd_backlight aygıtlarının "brightness" ve (RGB ise) "multi_intensity" dosyalarına dokunur.
+# Elle karşılığı: echo "r g b" | sudo tee .../multi_intensity  ve  echo N | sudo tee .../brightness
+# make uninstall kuralı siler ve izinleri eski haline (0644) döndürür.
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="*::kbd_backlight", RUN+="/bin/sh -c 'chmod 0666 /sys%p/brightness; [ -e /sys%p/multi_intensity ] && chmod 0666 /sys%p/multi_intensity; true'"

@@ -34,7 +34,9 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 - CPU, GPU and iGPU temperatures. A sleeping NVIDIA GPU is not woken up just to read its temperature.
 
 ### Keyboard lighting
-- **UI only for now, it does not control anything yet.** Color wheel, effect modes, brightness and speed are planned.
+- Change the keyboard **color** (color wheel, presets, or your Caelestia theme color) and **brightness**
+- Works with the kernel's keyboard backlight interface (`/sys/class/leds/*::kbd_backlight`); single-zone RGB (the whole keyboard is one color) or brightness only on non-RGB keyboards
+- Effects (breathing, rainbow, …) are not there yet
 
 ### Caelestia integration
 - Colors follow Caelestia's scheme (`~/.local/state/caelestia/scheme.json`) live.
@@ -69,6 +71,9 @@ This installs:
 | `ccenter` command | `/usr/bin/ccenter` |
 | Launcher entry and icon | `/usr/share/applications/ccenter.desktop`, `/usr/share/icons/hicolor/scalable/apps/ccenter.svg` |
 | Background service (off until you enable it) | `/usr/lib/systemd/user/ccenter.service` |
+| Keyboard backlight permission (udev rule) | `/usr/lib/udev/rules.d/90-ccenter.rules` |
+
+The udev rule lets Ccenter change the keyboard light without root: it makes only the `brightness` and `multi_intensity` files of `*::kbd_backlight` writable. Uninstalling removes the rule and restores the permissions.
 
 Nothing is written to your home folder during installation. The app itself only writes its settings to `~/.config/ccenter/settings.json`, and only after you change something.
 
@@ -96,6 +101,8 @@ ccenter status              # fans, temperatures, active profile
 ccenter profiles            # list profiles (* = active)
 ccenter profile Sessiz      # apply a profile (case-insensitive)
 ccenter boost 15            # max fan for 15 minutes (0 = off, -1 = until turned off)
+ccenter kbd color "#ff0000" # keyboard color
+ccenter kbd brightness 50   # keyboard brightness in percent (0 = off)
 ccenter hide                # also: open, toggle
 ccenter quit                # quit; fans go back to NBFC auto
 ccenter --help
@@ -119,7 +126,7 @@ Run it straight from the cloned folder without installing:
 ./bin/ccenter
 ```
 
-`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. Quickshell reloads the UI live when you save a file.
+`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. For keyboard control without a full install, `sudo make udev` installs just the udev rule (`sudo make uninstall-udev` removes it). Quickshell reloads the UI live when you save a file.
 
 ## Project layout
 
@@ -143,8 +150,9 @@ Makefile            install / uninstall
 - [x] Persist per-fan settings across restarts
 - [x] Profiles, background mode, tray icon, notifications
 - [x] System-wide installation (`make install`)
-- [ ] Keyboard RGB backend
-- [ ] Sync keyboard colors with Caelestia
+- [x] Keyboard color and brightness
+- [ ] Keyboard effects (breathing, rainbow, …)
+- [ ] Keep the keyboard color in sync with the Caelestia theme automatically (one-click theme color is already there)
 - [ ] English UI
 
 Issues and feedback are welcome, but expect rough edges.
