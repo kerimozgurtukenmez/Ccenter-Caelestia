@@ -39,16 +39,25 @@ files=""
 for f in "$data/applications/ccenter.desktop" "$data/systemd/user/ccenter.service" "$config/systemd/user/ccenter.service"; do
     [ -f "$f" ] && grep -q "$app" "$f" && files="$files $f"
 done
+# Startup files where install.sh added the PATH block (only the block between the markers is removed)
+mark_begin="# >>> ccenter >>>"
+rcfiles=""
+for f in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -f "$f" ] && grep -qF "$mark_begin" "$f" && rcfiles="$rcfiles $f"
+done
+fishconf=$config/fish/conf.d/ccenter.fish
+[ -f "$fishconf" ] && grep -qF "$mark_begin" "$fishconf" && files="$files $fishconf"
 [ -L "$HOME/.local/bin/ccenter" ] && [ "$(readlink -f "$HOME/.local/bin/ccenter")" = "$launcher" ] && files="$files $HOME/.local/bin/ccenter"
 
 t "Removing Ccenter" "Ccenter kaldırılıyor"
 say "===================="
-if [ ! -d "$app" ] && [ -z "$files" ]; then
+if [ ! -d "$app" ] && [ -z "$files$rcfiles" ]; then
     t "No installed Ccenter found ($app does not exist)." "Kurulu bir Ccenter bulunamadı ($app yok)."
 else
     t "Will be deleted:" "Silinecekler:"
     [ -d "$app" ] && say "  $app/"
     for f in $files; do say "  $f"; done
+    for f in $rcfiles; do t "  $f   (only the Ccenter PATH block)" "  $f   (sadece Ccenter'ın PATH bloğu)"; done
     ask "Continue?" "Devam edilsin mi?" y || { t "Cancelled, nothing changed." "İptal edildi, hiçbir şey değişmedi."; exit 0; }
 
     # If it's running, quit it cleanly (keyboard effect to the static colour, fans back to NBFC)
@@ -63,6 +72,7 @@ else
     fi
     rm -rf "$app"
     for f in $files; do rm -f "$f"; done
+    for f in $rcfiles; do sed -i '/^# >>> ccenter >>>$/,/^# <<< ccenter <<<$/d' "$f"; done
     command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload 2>/dev/null || true
     t "App removed." "Uygulama kaldırıldı."
 fi

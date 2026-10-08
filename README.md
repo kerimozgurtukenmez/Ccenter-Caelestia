@@ -93,6 +93,7 @@ Then start **Ccenter** from your app launcher, or run `ccenter`.
 | Launcher entry | `~/.local/share/applications/ccenter.desktop` |
 | Background service (off until you enable it) | `~/.local/share/systemd/user/ccenter.service` (or `~/.config/systemd/user/`) |
 | Short `ccenter` command | `~/.local/bin/ccenter`, a link to the command above |
+| `ccenter` in your `PATH` (only if it isn't already, asked separately) | a small marked block in `~/.bashrc` / `~/.zshrc`, or `~/.config/fish/conf.d/ccenter.fish` |
 
 Everything lives in the app's own folder; the other entries are only added where they can be. If a folder is not writable (for example `~/.local/bin` owned by root because something was once installed there with `sudo`), or a file with the same name belongs to another program, that entry is skipped and the installer tells you why. Nothing of yours is overwritten and you never have to change permissions.
 
@@ -109,7 +110,7 @@ The app writes its settings to `~/.config/ccenter/settings.json`, and only after
 ./uninstall.sh
 ```
 
-It shows what it will delete, quits Ccenter (keyboard back to your static color, fans back to NBFC) and asks separately whether to remove the keyboard permission and whether to keep your settings.
+It shows what it will delete (including only Ccenter's own `PATH` block in your shell startup files), quits Ccenter (keyboard back to your static color, fans back to NBFC) and asks separately whether to remove the keyboard permission and whether to keep your settings.
 
 ### Packaging / system-wide install
 
