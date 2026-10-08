@@ -168,6 +168,13 @@ Singleton {
         file.setText(JSON.stringify(data, null, 2) + "\n")
     }
 
+    // Kapanmadan önce: bekleyen değişikliği hemen yaz (yoksa son 500 ms'deki değişiklik kaybolur)
+    function flush() {
+        if (!saveTimer.running) return
+        saveTimer.stop()
+        write()
+    }
+
     // Art arda gelen değişiklikleri tek yazmada topla
     Timer { id: saveTimer; interval: 500; onTriggered: root.write() }
     Cmd { id: mkdir }
@@ -177,6 +184,7 @@ Singleton {
         path: root.path
         blockLoading: true          // ayarlar fan kartları oluşmadan hazır olsun
         atomicWrites: true          // önce geçici dosyaya yazar, sonra yerine koyar: yarım dosya kalmaz
+        blockWrites: true           // yazma bitmeden dönme: kapanırken flush() son değişikliği kaybetmesin
         printErrors: false          // dosya henüz yoksa hata basma
         onLoaded: {
             try {

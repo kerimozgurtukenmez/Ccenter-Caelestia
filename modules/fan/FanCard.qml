@@ -42,6 +42,11 @@ Card {
         mode = s.mode
     }
     onSourceChanged: if (!debounce.running) sync()
+    // Pencere kapanınca kart silinir: bekleyen (400 ms) değişiklik kaybolmasın, hemen FanState'e yaz
+    Component.onDestruction: if (debounce.running) {
+        debounce.stop()
+        fan.isGlobal ? FanState.setGlobal(fan.st) : FanState.setFan(fan.fanIndex, fan.st)
+    }
     Component.onCompleted: sync()
 
     RowLayout {

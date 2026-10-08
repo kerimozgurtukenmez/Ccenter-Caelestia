@@ -399,6 +399,7 @@ Singleton {
         Keyboard.restoreForQuit(() => root.releaseFansAndQuit())
     }
     function releaseFansAndQuit() {
+        Settings.flush()                      // bekleyen ayar değişikliği kaybolmasın
         const owned = Object.keys(targets).length > 0 || boosting
         targets = ({})
         boostUntil = 0

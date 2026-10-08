@@ -1,7 +1,7 @@
 #!/bin/sh
 # Ccenter başlatıcısı ve terminal komutları.
-# Kurulu: /usr/share/ccenter; proje klasöründen çalıştırılırsa (bin/ccenter) proje klasörü kullanılır.
-# CCENTER_DIR ile başka bir klasör seçilebilir.
+# Uygulama klasörü sırayla: CCENTER_DIR, proje klasörü (bin/ccenter'dan çalışınca),
+# <önek>/share/ccenter (~/.local/bin/ccenter → ~/.local/share/ccenter), /usr/share/ccenter.
 
 set -u
 
@@ -10,6 +10,8 @@ if [ -n "${CCENTER_DIR:-}" ]; then
     dir=$CCENTER_DIR
 elif [ -f "${self%/bin/ccenter}/shell.qml" ]; then
     dir=${self%/bin/ccenter}                      # geliştirme kopyası
+elif [ -f "${self%/bin/ccenter}/share/ccenter/shell.qml" ]; then
+    dir=${self%/bin/ccenter}/share/ccenter        # kurulu (önek düzeni: ~/.local ya da /usr)
 else
     dir=/usr/share/ccenter
 fi

@@ -61,34 +61,40 @@ A laptop control center for **fan control** and **keyboard lighting**, built wit
 ```sh
 git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git
 cd Ccenter-Caelestia
-sudo make install
+./install.sh
 ```
 
 Then start **Ccenter** from your app launcher, or run `ccenter`.
 
-This installs:
+**No `sudo` needed.** `install.sh` installs into your own home folder and shows the exact plan before it writes anything:
 
 | What | Where |
 |---|---|
-| App files | `/usr/share/ccenter/` |
-| `ccenter` command | `/usr/bin/ccenter` |
-| Launcher entry and icon | `/usr/share/applications/ccenter.desktop`, `/usr/share/icons/hicolor/scalable/apps/ccenter.svg` |
-| Background service (off until you enable it) | `/usr/lib/systemd/user/ccenter.service` |
-| Keyboard backlight permission (udev rule) | `/usr/lib/udev/rules.d/90-ccenter.rules` |
+| App, `ccenter` command and icon | `~/.local/share/ccenter/` (the command is `~/.local/share/ccenter/bin/ccenter`) |
+| Launcher entry | `~/.local/share/applications/ccenter.desktop` |
+| Background service (off until you enable it) | `~/.local/share/systemd/user/ccenter.service` (or `~/.config/systemd/user/`) |
+| Short `ccenter` command | `~/.local/bin/ccenter`, a link to the command above |
 
-The udev rule lets Ccenter change the keyboard light without root: it makes only the `brightness` and `multi_intensity` files of `*::kbd_backlight` writable. Uninstalling removes the rule and restores the permissions.
+Everything lives in the app's own folder; the other entries are only added where they can be. If a folder is not writable (for example `~/.local/bin` owned by root because something was once installed there with `sudo`), or a file with the same name belongs to another program, that entry is skipped and the installer tells you why. Nothing of yours is overwritten and you never have to change permissions.
 
-Nothing is written to your home folder during installation. The app itself only writes its settings to `~/.config/ccenter/settings.json`, and only after you change something.
+The app writes its settings to `~/.config/ccenter/settings.json`, and only after you change something.
 
-The cloned folder is not needed after installation; you can delete it. To update later, pull or clone again and run `sudo make install`.
+### Permissions: asked, never taken silently
+
+- **Keyboard light (optional).** To change the keyboard color and brightness, Ccenter needs write access to two files of your keyboard backlight (`/sys/class/leds/*::kbd_backlight/brightness` and `multi_intensity`). `install.sh` explains what this does and **asks** you; the default answer is no. Only if you say yes, your password is asked for that single step, which adds `/etc/udev/rules.d/90-ccenter.rules`. You can also grant it later from the Keyboard tab (the "İzin ver" button; your password is asked by the system's own dialog) and remove it there again ("İzni kaldır"). It only affects the keyboard light; it gives no access to fans, files or the system.
+- **NBFC service actions** (start/stop/restart the fan service, apply a config) ask for your password through polkit every time you use them. Setting fan speeds does not need a password.
 
 ### Uninstall
 
 ```sh
-sudo make uninstall
+./uninstall.sh
 ```
 
-Your settings in `~/.config/ccenter` are kept; delete that folder too if you want a clean slate. If you enabled the background service, run `systemctl --user disable ccenter.service` first.
+It shows what it will delete, quits Ccenter (keyboard back to your static color, fans back to NBFC) and asks separately whether to remove the keyboard permission and whether to keep your settings.
+
+### Packaging / system-wide install
+
+The `Makefile` is for packagers (`make DESTDIR=… PREFIX=/usr install`) or a system-wide install with `sudo make install`. It never adds the keyboard permission on its own; that is a separate, optional `sudo make udev`.
 
 ### Running in the background
 - Closing the window does **not** quit Ccenter; it keeps controlling the fans in the background. Open it again from the launcher, the tray icon or with `ccenter`.
@@ -124,7 +130,7 @@ The window uses the app ID `ccenter`, so you can target it in Hyprland rules wit
 
 - Return fans to NBFC's automatic control: `nbfc set -a`
 - Ccenter never edits NBFC config files. It only changes which config is selected. To go back to a config of your choice: `sudo nbfc config --set "<config name>"` followed by `sudo nbfc restart`
-- Remove the app: `sudo make uninstall` (see above)
+- Remove the app: `./uninstall.sh` (see above)
 
 ## Development
 
@@ -134,7 +140,7 @@ Run it straight from the cloned folder without installing:
 ./bin/ccenter
 ```
 
-`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. For keyboard control without a full install, `sudo make udev` installs just the udev rule (`sudo make uninstall-udev` removes it). Quickshell reloads the UI live when you save a file.
+`bin/ccenter` uses the folder it lives in, so the same commands work (`./bin/ccenter status`, …). Quit the installed copy first; only one copy can run at a time. Keyboard permission works the same way (Keyboard tab > "İzin ver"). Quickshell reloads the UI live when you save a file.
 
 ## Project layout
 
@@ -149,7 +155,9 @@ scripts/            sensor / hardware info scripts, tray icon helper
 assets/             icons and images
 bin/ccenter         launcher and terminal commands
 dist/               desktop entry and systemd user service
-Makefile            install / uninstall
+install.sh          install into ~/.local (no sudo; asks about the keyboard permission)
+uninstall.sh        remove it again
+Makefile            system-wide install / packaging
 ```
 
 ## Status / roadmap
@@ -157,7 +165,7 @@ Makefile            install / uninstall
 - [x] Fan control through NBFC
 - [x] Persist per-fan settings across restarts
 - [x] Profiles, background mode, tray icon, notifications
-- [x] System-wide installation (`make install`)
+- [x] Installation without sudo (`./install.sh`), permissions only when you agree
 - [x] Keyboard color and brightness
 - [x] Keyboard breathing effect (one color, several colors or Caelestia theme colors)
 - [x] Keyboard color cycle effect
