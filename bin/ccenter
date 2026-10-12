@@ -55,6 +55,7 @@ Kullanım: ccenter [komut]
   kbd range <% %>    Nefesin en düşük ve en yüksek seviyesi (ör. kbd range 10 90)
   kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
   lang <tr|en>       Arayüz dili
+  report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
   quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner)
   --help | --version
 EOF
@@ -78,6 +79,7 @@ Usage: ccenter [command]
   kbd range <% %>    Lowest and highest breathing level (e.g. kbd range 10 90)
   kbd themecount <n> Number of colors with the Caelestia source (3-6)
   lang <tr|en>       UI language
+  report             Create a diagnostic report for bug reports (a text file in your home folder)
   quit               Quit completely (fans driven by Ccenter go back to NBFC)
   --help | --version
 EOF
@@ -138,6 +140,9 @@ case "${1:-}" in
             speed) [ $# -ge 3 ] || { err "Usage: ccenter kbd speed <0-100>" "Kullanım: ccenter kbd speed <0-100>"; exit 2; }; ipc kbdSpeed -- "$3" ;;
             *) err "Usage: ccenter kbd [color <#hex> | brightness <0-100> | effect <name> | source <name> | speed <0-100> | range <% %> | themecount <3-6>]" "Kullanım: ccenter kbd [color <#hex> | brightness <0-100> | effect <ad> | source <ad> | speed <0-100> | range <% %> | themecount <3-6>]"; exit 2 ;;
         esac ;;
+    report)
+        # Diagnostic report (works without the app running): one text file in your home folder
+        exec sh "$dir/scripts/report.sh" "$dir" ;;
     lang)
         [ $# -ge 2 ] || { err "Usage: ccenter lang <tr|en>" "Kullanım: ccenter lang <tr|en>"; exit 2; }
         need_running; ipc lang "$2" ;;

@@ -244,6 +244,13 @@ var dict = {
         "On": "Açık",
         "Low": "Düşük",
         "Medium": "Orta",
-        "High": "Yüksek"
+        "High": "Yüksek",
+        "Problem?": "Sorun mu var?",
+        "Create a report with your system details and Ccenter's recent logs, and attach it to a GitHub issue. It is saved as a text file in your home folder; nothing is sent anywhere. Personal names and paths are removed.": "Sistem bilgilerini ve Ccenter'ın son log kayıtlarını içeren bir rapor oluştur, GitHub'da bir issue'ya ekle. Ev klasörüne metin dosyası olarak kaydedilir; hiçbir yere gönderilmez. Kişisel adlar ve yollar çıkarılır.",
+        "Creating…": "Oluşturuluyor…",
+        "Create report": "Rapor oluştur",
+        "Open report": "Raporu aç",
+        "Report a problem": "Sorun bildir",
+        "Saved: %1": "Kaydedildi: %1"
     }
 }

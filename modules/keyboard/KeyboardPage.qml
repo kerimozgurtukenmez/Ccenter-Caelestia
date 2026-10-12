@@ -528,5 +528,7 @@ Flickable {
                 }
             }
         }
+
+        ReportCard {}
     }
 }

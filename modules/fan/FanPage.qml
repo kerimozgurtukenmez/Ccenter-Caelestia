@@ -79,6 +79,7 @@ ColumnLayout {
 
             NotifyCard {}
             BackgroundCard {}
+            ReportCard {}
         }
     }
 }

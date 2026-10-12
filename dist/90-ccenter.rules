@@ -1,6 +1,6 @@
 # Ccenter: lets ONE user (the one who granted it) set the keyboard light's colour and brightness without root.
-# @UID@ is replaced with that user's numeric id when the rule is installed (the app's "Grant permission" button
-# or install.sh); other users of the computer get no access.
+# The numeric user id in the three lines below is filled in when the rule is installed (the app's "Grant permission"
+# button or install.sh); other users of the computer get no access.
 # Only these files of keyboard backlight lights are touched, and only their owner changes (permission bits stay):
 #   brightness, multi_intensity (RGB colour), kbd_rgb_mode (ASUS TUF colour, write-only)
 # Lights: *::kbd_backlight (HP, ASUS, Lenovo, ...) and *::kbd_zoned_backlight-* (HP four-zone keyboards).

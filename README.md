@@ -181,6 +181,7 @@ ccenter kbd speed 60        # effect speed 0-100
 ccenter kbd range 20 80     # breathing lowest and highest level in percent
 ccenter kbd themecount 5    # number of Caelestia colors (3-6)
 ccenter kbd info            # keyboard detection report: laptop, driver, light, permission, support
+ccenter report              # diagnostic report for bug reports (see "Reporting a problem")
 ccenter lang en             # interface language: en | tr
 ccenter hide                # also: open, toggle
 ccenter quit                # quit; fans go back to NBFC auto
@@ -190,6 +191,18 @@ ccenter --help
 Handy for Hyprland keybinds, e.g. `bind = SUPER, F9, exec, ccenter profile performance`.
 
 The window uses the app ID `ccenter`, so you can target it in Hyprland rules with `class:^(ccenter)$`.
+
+## Reporting a problem
+
+Something not working? Create a diagnostic report and attach it to a [GitHub issue](https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues):
+
+```sh
+ccenter report        # or: ~/.local/share/ccenter/bin/ccenter report, or ./bin/ccenter report in the cloned folder
+```
+
+or press **Create report** at the bottom of the Fan or Keyboard tab. It works even if Ccenter doesn't start.
+
+The report is one text file in your home folder (`~/ccenter-report-<date>.txt`). It contains: Ccenter, system and package versions, the laptop model (no serial numbers), NBFC status and config, temperature and keyboard detection output, the keyboard permission rule, your Ccenter settings, the background service journal and the logs of the last Ccenter runs (also runs that crashed; these logs are kept until you reboot, so create the report before rebooting). Your home folder, user name and computer name are replaced with `~`, `<user>` and `<host>`. Nothing is sent anywhere: read it, and share what you are comfortable with.
 
 ## Reverting changes
 
@@ -283,7 +296,8 @@ modules/keyboard/   keyboard tab
 components/         shared UI components
 utils/              helpers
 scripts/            sensors.sh (temperatures), hwinfo.sh (CPU/GPU names), kbdinfo.sh (keyboard detection),
-                    kbd-rule-check.sh (checks the keyboard permission rule), tray.py (tray icon)
+                    kbd-rule-check.sh (checks the keyboard permission rule), report.sh (diagnostic report),
+                    tray.py (tray icon)
 assets/             icons and images used by the app
 docs/screenshots/   README images (not installed)
 bin/ccenter         launcher and terminal commands
