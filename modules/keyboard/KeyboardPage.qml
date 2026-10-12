@@ -3,8 +3,10 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Keyboard light (single zone). Logic lives in services/Keyboard.qml; this is only the view.
-// Layout: settings of the selected effect on the left, effect list on the right, overall brightness below.
+// Keyboard light. Logic and hardware detection live in services/Keyboard.qml; this is only the view.
+// The page adapts to what was detected: a detection summary on top, then (if the light has colour) the settings of
+// the selected effect on the left and the effect list on the right (effects only on tested drivers), brightness below
+// (a slider, or level buttons when the light has only a few levels).
 Flickable {
     id: page
     clip: true
@@ -14,7 +16,7 @@ Flickable {
 
     readonly property bool canWrite: Keyboard.available && Keyboard.writable
     readonly property bool breathing: Keyboard.effect === "breathing"
-    readonly property bool animated: Keyboard.effect !== "static"     // breathing or colour cycle
+    readonly property bool animated: Keyboard.effectsAllowed && Keyboard.effect !== "static"     // breathing or colour cycle
     // Colour source options: no "chosen colour" for the colour cycle (a cycle needs more than one colour)
     readonly property var sources: breathing ? [{ id: "single", t: I18n.t("Chosen color") }, { id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
                                              : [{ id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
@@ -86,9 +88,56 @@ Flickable {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: !Keyboard.available ? I18n.t("This computer has no keyboard light the kernel recognizes.")
-                            : (Keyboard.rgb ? I18n.t("RGB · single zone (the whole keyboard is one color)") : I18n.t("Single color · brightness only"))
-                              + (Keyboard.rgb ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
+                            : Keyboard.kindText() + (Keyboard.effectsAllowed ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
                         color: Colours.fgDim
+                        font.pixelSize: 11
+                    }
+                }
+            }
+            // Detection, step by step: laptop -> driver -> light -> permission -> support level
+            ColumnLayout {
+                visible: Keyboard.ready
+                Layout.fillWidth: true
+                spacing: 4
+                Repeater {
+                    model: [
+                        { ok: Keyboard.dmi.vendor !== "", label: I18n.t("Laptop"),
+                          value: [Keyboard.dmi.vendor, Keyboard.dmi.product].filter(x => x).join(" · ") || "?" },
+                        { ok: Keyboard.driver !== "", label: I18n.t("Driver"), value: Keyboard.driver || I18n.t("none found") },
+                        { ok: Keyboard.available, label: I18n.t("Light"),
+                          value: Keyboard.available ? Keyboard.name : I18n.t("none found") },
+                        { ok: Keyboard.available && Keyboard.writable, label: I18n.t("Permission"),
+                          value: !Keyboard.available ? "—" : Keyboard.writable ? I18n.t("yes") : I18n.t("needed") },
+                        { ok: Keyboard.available, label: I18n.t("Support"), value: Keyboard.supportText() }
+                    ]
+                    RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+                        StyledText {
+                            text: modelData.ok ? "check_circle" : "cancel"
+                            color: modelData.ok ? Colours.success : Colours.fgDim
+                            font { family: Colours.iconFont; pixelSize: 16 }
+                        }
+                        StyledText { text: modelData.label; color: Colours.fgDim; font.pixelSize: 11; Layout.preferredWidth: 90 }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: modelData.value
+                            elide: Text.ElideRight
+                            color: Colours.fg
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+                // Findings (e.g. an RGB keyboard the kernel doesn't expose) and what to use instead
+                Repeater {
+                    model: Keyboard.notes
+                    StyledText {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: Keyboard.noteText(modelData)
+                        color: Colours.warning
                         font.pixelSize: 11
                     }
                 }
@@ -109,7 +158,7 @@ Flickable {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name) + "\n"
-                        + I18n.t("What changes: programs on this computer can change the keyboard light's color and brightness; it gives no access to the fans, files or the system.") + "\n"
+                        + I18n.t("What changes: only your user can change the keyboard light's color and brightness; it gives no access to the fans, files or the system, and nothing to other users.") + "\n"
                         + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Ccenter never sees it.")
                     color: Colours.fgDim
                     font.pixelSize: 11
@@ -122,9 +171,29 @@ Flickable {
                     onClicked: Keyboard.grantPermission()
                 }
             }
+            // The old rule (earlier versions) let every user write; offer the per-user version
+            RowLayout {
+                visible: Keyboard.writable && Keyboard.ruleLegacy
+                Layout.fillWidth: true
+                spacing: 8
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: I18n.t("The installed permission is from an older, less strict version. The new version allows only your user.")
+                    color: Colours.warning
+                    font.pixelSize: 11
+                }
+                Btn {
+                    icon: "shield"
+                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Update permission")
+                    filled: true
+                    enabled: !Keyboard.permBusy
+                    onClicked: Keyboard.grantPermission()
+                }
+            }
             // If the permission comes from the rule the app added, it can be removed here
             RowLayout {
-                visible: Keyboard.writable && Keyboard.ruleAt === "etc"
+                visible: Keyboard.writable && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy
                 Layout.fillWidth: true
                 spacing: 8
                 StyledText {
@@ -162,7 +231,7 @@ Flickable {
             // Settings of the selected effect
             Card {
                 Layout.alignment: Qt.AlignTop
-                title: I18n.t("Settings · %1").arg(page.current.name)
+                title: Keyboard.effectsAllowed ? I18n.t("Settings · %1").arg(page.current.name) : I18n.t("Color")
 
                 // Breathing / colour cycle settings
                 ColumnLayout {
@@ -289,12 +358,14 @@ Flickable {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: I18n.t("The keyboard stays lit in your chosen color.")
+                          + (Keyboard.rgb && !Keyboard.effectsAllowed ? " " + I18n.t("Effects are only enabled on keyboards they have been tested with.") : "")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
 
                 // Colour picking (all effects; locked when the source is Caelestia)
                 StyledText {
+                    visible: Keyboard.effectsAllowed       // otherwise the card itself is titled "Color"
                     text: page.themeLocked ? I18n.t("The colors come from the Caelestia theme")
                         : page.editingList ? I18n.t("Color · color %1").arg(page.editAt + 1) : I18n.t("Color")
                     color: Colours.fg
@@ -346,6 +417,7 @@ Flickable {
                 Layout.fillWidth: false
                 Layout.preferredWidth: 210
                 title: I18n.t("Effects")
+                visible: Keyboard.effectsAllowed
                 gap: 6
 
                 Repeater {
@@ -399,13 +471,17 @@ Flickable {
 
         // ---------- overall brightness ----------
         Card {
+            id: brightCard
             visible: Keyboard.available
             title: I18n.t("Brightness")
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4
 
+            // Lights with only a few levels (ASUS 0-3, Lenovo 0-1/0-2) get one button per level instead of a slider
+            readonly property bool stepped: Keyboard.maxBrightness <= 3
             SliderRow {
                 id: bright
+                visible: !brightCard.stepped
                 label: I18n.t("Brightness")
                 value: Keyboard.maxBrightness > 0 ? Keyboard.brightness / Keyboard.maxBrightness : 0
                 readout: page.pct(value)
@@ -419,6 +495,7 @@ Flickable {
                 }
             }
             RowLayout {
+                visible: !brightCard.stepped
                 Layout.fillWidth: true
                 spacing: 8
                 Repeater {
@@ -428,6 +505,25 @@ Flickable {
                         Layout.fillWidth: true
                         text: modelData.t
                         onClicked: Keyboard.setBrightness(modelData.v * Keyboard.maxBrightness)
+                    }
+                }
+            }
+            RowLayout {
+                visible: brightCard.stepped
+                Layout.fillWidth: true
+                spacing: 8
+                Repeater {
+                    // 1 level: Off/On; 2: Off/Low/High; 3: Off/Low/Medium/High
+                    model: Keyboard.maxBrightness === 1 ? [I18n.t("Off"), I18n.t("On")]
+                         : Keyboard.maxBrightness === 2 ? [I18n.t("Off"), I18n.t("Low"), I18n.t("High")]
+                         : [I18n.t("Off"), I18n.t("Low"), I18n.t("Medium"), I18n.t("High")]
+                    Btn {
+                        required property string modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        text: modelData
+                        filled: Keyboard.brightness === index
+                        onClicked: Keyboard.setBrightness(index)
                     }
                 }
             }

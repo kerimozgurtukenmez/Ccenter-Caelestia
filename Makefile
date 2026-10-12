@@ -2,7 +2,7 @@
 # (installs into the home folder, needs no admin password, asks about the keyboard permission).
 #   sudo make install      installs under /usr (does NOT add the keyboard permission)
 #   sudo make uninstall    removes it (does not touch user settings in ~/.config/ccenter)
-#   sudo make udev         keyboard light permission (udev rule), optional and run separately
+#   sudo make udev         keyboard light permission (udev rule) for the user running sudo, optional and separate
 # Packaging: make DESTDIR=/package/root PREFIX=/usr install
 
 PREFIX  ?= /usr
@@ -15,8 +15,10 @@ ICONDIR = $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 UNITDIR = $(DESTDIR)$(PREFIX)/lib/systemd/user
 UDEVDIR = $(DESTDIR)$(PREFIX)/lib/udev/rules.d
 LICDIR  = $(DESTDIR)$(PREFIX)/share/licenses/ccenter
-# Keyboard light files (to restore their permissions to 0644 on uninstall)
-KBD_FILES = /sys/class/leds/*::kbd_backlight/brightness /sys/class/leds/*::kbd_backlight/multi_intensity
+# Keyboard lights (their files go back to root on uninstall)
+KBD_LEDS = /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*
+# The rule gives access to one user: the one running "sudo make udev" (SUDO_UID), or UDEV_UID=<id>
+UDEV_UID ?= $(SUDO_UID)
 
 # Files the app needs at runtime (README, dist etc. are not installed; the license goes to share/licenses)
 APP_FILES = shell.qml VERSION
@@ -52,9 +54,15 @@ uninstall: uninstall-udev
 	@echo "Ccenter removed. Your settings are kept in ~/.config/ccenter (delete it by hand if you want)."
 	@echo "If you enabled the background service: systemctl --user disable ccenter.service"
 
-# Keyboard light permission: install the rule and apply it right away (only copied when packaging with DESTDIR)
+# Keyboard light permission: install the rule for one user and apply it right away (packagers: the rule needs a user
+# id, so it can't be shipped in a package; users grant it from the app instead)
 udev:
-	install -Dm 644 dist/90-ccenter.rules $(UDEVDIR)/90-ccenter.rules
+	@case "$(UDEV_UID)" in ""|*[!0-9]*) echo "Run it as: sudo make udev   (or UDEV_UID=<user id>)"; exit 1 ;; esac
+	install -d $(UDEVDIR)
+	sed 's/@UID@/$(UDEV_UID)/g' dist/90-ccenter.rules > $(UDEVDIR)/90-ccenter.rules.new
+	sh scripts/kbd-rule-check.sh $(UDEVDIR)/90-ccenter.rules.new $(UDEV_UID) || { rm -f $(UDEVDIR)/90-ccenter.rules.new; exit 1; }
+	chmod 644 $(UDEVDIR)/90-ccenter.rules.new
+	mv $(UDEVDIR)/90-ccenter.rules.new $(UDEVDIR)/90-ccenter.rules
 	@if [ -z "$(DESTDIR)" ] && command -v udevadm >/dev/null; then \
 		udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds; \
 	fi
@@ -63,5 +71,7 @@ uninstall-udev:
 	rm -f $(UDEVDIR)/90-ccenter.rules
 	@if [ -z "$(DESTDIR)" ]; then \
 		command -v udevadm >/dev/null && udevadm control --reload-rules; \
-		for f in $(KBD_FILES); do [ -e "$$f" ] && chmod 0644 "$$f"; done; true; \
+		for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; \
+			for f in brightness multi_intensity; do [ -e "$$d/$$f" ] && chown root:root "$$d/$$f" && chmod 0644 "$$d/$$f"; done; \
+			[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; true; \
 	fi

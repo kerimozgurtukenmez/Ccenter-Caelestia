@@ -1,6 +1,14 @@
-# Ccenter: write access so the keyboard light's colour and brightness can be set without root.
-# Only touches the "brightness" and (if RGB) "multi_intensity" files of *::kbd_backlight devices.
-# Manual equivalent: echo "r g b" | sudo tee .../multi_intensity   and   echo N | sudo tee .../brightness
-# Never installed silently: install.sh asks, or the app's grant button adds it (with the admin password).
-# Location: /etc/udev/rules.d/90-ccenter.rules. Removing it restores the permissions (0644).
-ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="*::kbd_backlight", RUN+="/bin/sh -c 'chmod 0666 /sys%p/brightness; [ -e /sys%p/multi_intensity ] && chmod 0666 /sys%p/multi_intensity; true'"
+# Ccenter: lets ONE user (the one who granted it) set the keyboard light's colour and brightness without root.
+# @UID@ is replaced with that user's numeric id when the rule is installed (the app's "Grant permission" button
+# or install.sh); other users of the computer get no access.
+# Only these files of keyboard backlight lights are touched, and only their owner changes (permission bits stay):
+#   brightness, multi_intensity (RGB colour), kbd_rgb_mode (ASUS TUF colour, write-only)
+# Lights: *::kbd_backlight (HP, ASUS, Lenovo, ...) and *::kbd_zoned_backlight-* (HP four-zone keyboards).
+# No shell is involved: udev runs chown directly, and only if the file exists (TEST).
+# Manual equivalent: echo "r g b" | sudo tee /sys/class/leds/<light>/multi_intensity
+# Never installed silently. Location: /etc/udev/rules.d/90-ccenter.rules. Removing it (app "Remove permission",
+# uninstall.sh) and giving the files back to root restores root-only access.
+# Before it is installed, every line of this file is checked: only comments and the three lines below are accepted.
+SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="brightness", RUN+="/bin/chown @UID@ /sys%p/brightness"
+SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="multi_intensity", RUN+="/bin/chown @UID@ /sys%p/multi_intensity"
+SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="kbd_rgb_mode", RUN+="/bin/chown @UID@ /sys%p/kbd_rgb_mode"

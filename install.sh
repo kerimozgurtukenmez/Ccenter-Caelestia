@@ -199,50 +199,68 @@ if [ -n "$rcfiles$fishconf" ]; then
 fi
 
 # ---------- keyboard light permission (optional) ----------
+# The rule gives write access to the keyboard light's files to THIS user only (their owner becomes this user's id).
+# Older versions made them writable for every user (0666); that is reset first.
+uid=$(id -u)
+reset_perms='for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do [ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; [ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; true'
 led=""
-for d in /sys/class/leds/*::kbd_backlight; do [ -e "$d/brightness" ] && { led=$d; break; }; done
+for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do
+    [ -e "$d/brightness" ] && { led=$d; break; }
+done
+legacy=""; [ -f "$rule" ] && grep -q -e '0666' -e '/bin/sh' "$rule" && legacy=1     # an older, less strict rule
 if [ -z "$led" ]; then
     t "No keyboard light found; skipped the keyboard permission step." "Klavye ışığı bulunamadı; klavye izni adımı atlandı."
-elif [ -w "$led/brightness" ]; then
+elif [ -w "$led/brightness" ] && [ -z "$legacy" ]; then
     t "The keyboard light is already writable; no permission step needed." "Klavye ışığına zaten yazılabiliyor; izin adımı gerekmiyor."
 else
     t "Keyboard light permission (optional)" "Klavye ışığı izni (isteğe bağlı)"
     say "--------------------------------"
+    if [ -n "$legacy" ]; then
+        t "An older, less strict Ccenter permission is installed (it may let EVERY user of this computer change the keyboard light)." \
+          "Eski, daha gevşek bir Ccenter izni kurulu (bu bilgisayardaki HER kullanıcının klavye ışığını değiştirmesine izin verebilir)."
+        t "The new version gives access to your user only." "Yeni sürüm sadece senin kullanıcına izin verir."
+    fi
     t "Light found: ${led##*/}" "Bulunan ışık: ${led##*/}"
-    t "For Ccenter to change the keyboard's color, brightness and effects it needs write access to these" \
-      "Ccenter'ın klavyenin rengini, parlaklığını ve efektlerini değiştirebilmesi için ışığın şu dosyalarına"
-    t "files of the light (a permanent version of what you do by hand with 'sudo tee'):" \
-      "yazma izni gerekir (elle 'sudo tee' ile yaptığın şeyin kalıcı hali):"
-    say "  $led/brightness"
-    [ -e "$led/multi_intensity" ] && say "  $led/multi_intensity"
+    t "For Ccenter to change the keyboard's color, brightness and effects, your user needs write access to the light's" \
+      "Ccenter'ın klavyenin rengini, parlaklığını ve efektlerini değiştirebilmesi için kullanıcının ışığın"
+    t "brightness and color files (a permanent version of what you do by hand with 'sudo tee')." \
+      "parlaklık ve renk dosyalarına yazabilmesi gerekir (elle 'sudo tee' ile yaptığın şeyin kalıcı hali)."
     say ""
     t "What is done : the file $rule is added (a udev rule); no other file is touched." \
       "Ne yapılır : $rule dosyası eklenir (udev kuralı); başka hiçbir dosyaya dokunulmaz."
-    t "What changes : programs on this computer can change the keyboard light's color and brightness." \
-      "Ne değişir : bu bilgisayardaki programlar klavye ışığının rengini ve parlaklığını değiştirebilir."
-    t "               It gives no access to anything else (fans, files, the system)." \
-      "             Başka hiçbir şeye (fanlar, dosyalar, sistem) erişim vermez."
+    t "What changes : only your user (id $uid) can change the keyboard light's color and brightness." \
+      "Ne değişir : sadece senin kullanıcın (id $uid) klavye ışığının rengini ve parlaklığını değiştirebilir."
+    t "               It gives no access to anything else (fans, files, the system) and nothing to other users." \
+      "             Başka hiçbir şeye (fanlar, dosyalar, sistem) erişim vermez, diğer kullanıcılara hiçbir şey vermez."
     t "Undo         : ./uninstall.sh, or in the app Keyboard > 'Remove permission'." \
       "Geri alma  : ./uninstall.sh ya da uygulamada Klavye > 'İzni kaldır'."
     t "You can also grant it later with the 'Grant permission' button in the app." \
       "İstersen şimdi değil, sonra uygulamadaki 'İzin ver' butonundan da verebilirsin."
     say ""
-    if ask "Grant the keyboard light permission? (asks for the admin password)" "Klavye ışığı izni verilsin mi? (yönetici şifresi istenecek)" n; then
-        t "Will run: sudo install -Dm644 $app/dist/90-ccenter.rules $rule && sudo udevadm control --reload-rules && sudo udevadm trigger --action=change --subsystem-match=leds" \
-          "Çalıştırılacak: sudo install -Dm644 $app/dist/90-ccenter.rules $rule && sudo udevadm control --reload-rules && sudo udevadm trigger --action=change --subsystem-match=leds"
-        if sudo install -Dm644 "$app/dist/90-ccenter.rules" "$rule" \
+    if [ -n "$legacy" ]; then _q_en="Replace it with the new version? (asks for the admin password)"; _q_tr="Yeni sürümle değiştirilsin mi? (yönetici şifresi istenecek)"; _def=y
+    else _q_en="Grant the keyboard light permission? (asks for the admin password)"; _q_tr="Klavye ışığı izni verilsin mi? (yönetici şifresi istenecek)"; _def=n; fi
+    if ask "$_q_en" "$_q_tr" "$_def"; then
+        sed "s/@UID@/$uid/g" "$app/dist/90-ccenter.rules" > "$app/dist/90-ccenter.rules.$uid"
+        t "Will run (as admin): check the rule, give the light files back to root, install $rule for user id $uid, reload udev" \
+          "Çalıştırılacak (yönetici olarak): kuralı denetle, ışık dosyalarını root'a geri ver, $rule kuralını kullanıcı id $uid için kur, udev'i yenile"
+        # The rule is copied to a root-owned temporary file and checked there, so it can't change after the check
+        if sudo install -Dm644 "$app/dist/90-ccenter.rules.$uid" "$rule.new" \
+           && { sudo sh "$app/scripts/kbd-rule-check.sh" "$rule.new" "$uid" || { sudo rm -f "$rule.new"; false; }; } \
+           && sudo sh -c "$reset_perms" \
+           && sudo mv "$rule.new" "$rule" \
            && sudo udevadm control --reload-rules \
-           && sudo udevadm trigger --action=change --subsystem-match=leds; then
-            sleep 1
+           && sudo udevadm trigger --action=change --subsystem-match=leds \
+           && sudo udevadm settle; then
             if [ -w "$led/brightness" ]; then t "Permission granted." "İzin verildi."
             else t "The rule was added but the permission isn't visible yet; it applies after a reboot." "Kural eklendi ama izin henüz görünmüyor; yeniden başlatınca geçerli olur."; fi
         else
             t "Could not grant the permission (no password, or an error). You can grant it later from the app." \
               "İzin verilemedi (şifre girilmedi ya da hata). Sonra uygulamadan verebilirsin."
         fi
+        rm -f "$app/dist/90-ccenter.rules.$uid"
     else
-        t "Keyboard permission not granted. You can grant it any time with 'Grant permission' in the Keyboard tab." \
-          "Klavye izni verilmedi. Klavye sekmesindeki 'İzin ver' ile istediğin zaman verebilirsin."
+        t "Keyboard permission not changed. You can do it any time in the Keyboard tab." \
+          "Klavye izni değiştirilmedi. Klavye sekmesinden istediğin zaman yapabilirsin."
     fi
 fi
 

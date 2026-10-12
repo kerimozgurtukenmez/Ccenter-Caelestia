@@ -46,6 +46,7 @@ Kullanım: ccenter [komut]
   profile <ad>       Profil uygula (büyük/küçük harf fark etmez)
   boost <dk>         Maksimum fan: dakika, 0 = kapat, -1 = süresiz
   kbd                Klavye ışığı durumu
+  kbd info           Klavye algılama raporu (laptop, sürücü, ışık, izin, destek)
   kbd color <#hex>   Klavye rengi (ör. kbd color "#ff0000")
   kbd brightness <%> Klavye parlaklığı 0-100
   kbd effect <ad>    Klavye efekti: static (sabit) | breathing (nefes) | cycle (renk geçişi)
@@ -68,6 +69,7 @@ Usage: ccenter [command]
   profile <name>     Apply a profile (case-insensitive)
   boost <min>        Max fan: minutes, 0 = off, -1 = until turned off
   kbd                Keyboard light status
+  kbd info           Keyboard detection report (laptop, driver, light, permission, support)
   kbd color <#hex>   Keyboard color (e.g. kbd color "#ff0000")
   kbd brightness <%> Keyboard brightness 0-100
   kbd effect <name>  Keyboard effect: static | breathing | cycle (color cycle)
@@ -126,6 +128,7 @@ case "${1:-}" in
         need_running
         case "${2:-}" in
             "") ipc kbd ;;
+            info) ipc kbdInfo ;;
             color) [ $# -ge 3 ] || { err "Usage: ccenter kbd color <#rrggbb>" "Kullanım: ccenter kbd color <#rrggbb>"; exit 2; }; ipc kbdColor "$3" ;;
             brightness) [ $# -ge 3 ] || { err "Usage: ccenter kbd brightness <0-100>" "Kullanım: ccenter kbd brightness <0-100>"; exit 2; }; ipc kbdBrightness -- "$3" ;;
             effect) [ $# -ge 3 ] || { err "Usage: ccenter kbd effect <static|breathing|cycle>" "Kullanım: ccenter kbd effect <static|breathing|cycle>"; exit 2; }; ipc kbdEffect "$3" ;;

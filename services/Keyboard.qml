@@ -4,20 +4,39 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// Keyboard backlight (the kernel LED interface): /sys/class/leds/*::kbd_backlight
-//   brightness (0..max_brightness); if RGB, multi_intensity "r g b" (0..multi_max_intensity)
-// No zones: the whole keyboard is one colour. Write access comes from the optional udev rule (dist/90-ccenter.rules).
+// Keyboard backlight. Detection (scripts/kbdinfo.sh) finds the laptop maker, the kernel driver and the light it
+// exposes, and picks a backend. SAFETY: only the kernel's own interfaces are used (LED class files under
+// /sys/class/leds); no raw WMI/ACPI/EC/USB access. The kernel driver validates every value.
+// Backends:
+//   led-rgb   one RGB light: brightness + multi_intensity "r g b"            (HP Victus/Omen single zone: hp::kbd_backlight)
+//   hp-zoned  HP four-zone keyboards: one LED per zone (hp::kbd_zoned_backlight-left/center/right/wasd);
+//             every zone gets the same colour and brightness
+//   asus-tuf  ASUS TUF: asus::kbd_backlight brightness (0..3) + kbd_rgb_mode "cmd mode r g b speed" for the colour.
+//             Always cmd 0 (apply only, never 1 = save to BIOS) and mode 0 (static). kbd_rgb_mode can't be read back.
+//   led-mono  brightness only (ASUS non-RGB, Lenovo IdeaPad/ThinkPad, others)
+// Software effects run only on drivers they were tested with (effectsAllowed). Write access comes from the optional
+// udev rule (dist/90-ccenter.rules), which gives write access to the user who granted it only.
 // Effects are done in software (this service always runs, so they continue while the window is closed):
 //   breathing: intensity eases between the lowest and highest level; the colour changes at the darkest point.
 //   cycle:     continuous smooth transition between colours along the hue, without dimming.
 Singleton {
     id: root
 
-    property string dir: ""                   // e.g. /sys/class/leds/hp::kbd_backlight
-    readonly property bool available: dir !== ""
-    readonly property string name: dir.slice(dir.lastIndexOf("/") + 1)
-    property bool rgb: false
+    property string backend: ""               // "" (none) | led-rgb | hp-zoned | asus-tuf | led-mono
+    property var zones: []                    // light folders that are written together (one, or the HP zones)
+    readonly property string dir: zones.length ? zones[0] : ""
+    readonly property bool available: backend !== ""
+    property string name: ""                  // e.g. hp::kbd_backlight (or "hp::kbd_zoned_backlight ×4")
+    property string driver: ""                // kernel driver of the light, e.g. hp-wmi, asus-nb-wmi, ideapad_acpi
+    property var dmi: ({ vendor: "", product: "", family: "", board: "" })
+    property string kernel: ""
+    property var notes: []                    // extra findings: legion-usb, rog-usb, hp-none
+    readonly property bool rgb: backend === "led-rgb" || backend === "hp-zoned" || backend === "asus-tuf"
+    // Software effects write many times per second: only on the driver they were tested with
+    readonly property bool effectsAllowed: rgb && driver === "hp-wmi" && backend !== "asus-tuf"
+    readonly property bool tested: backend === "led-rgb" && driver === "hp-wmi"
     property bool writable: false
+    property bool ruleLegacy: false           // an older, less strict rule is installed (0666 or running a shell)
     property bool ready: false                // first read finished?
     property int maxBrightness: 255
     property var maxIntensity: [255, 255, 255]
@@ -36,7 +55,7 @@ Singleton {
     property real speed: 0.5                  // 0 slow .. 1 fast
     readonly property real period: 8 - 7 * speed   // one breath / one colour (s): 8 .. 1
     property bool paused: false               // effect pauses while the permission is being revoked (the saved choice is kept)
-    readonly property bool effectActive: effect !== "static" && rgb && writable && !paused
+    readonly property bool effectActive: effect !== "static" && effectsAllowed && writable && !paused
     property int cycleIndex: 0                // index of the colour currently shown (the UI highlights it)
     property int themeCount: 3                // number of Caelestia colours (3..6)
     property real minLevel: 0                 // lowest breathing level (0..1); 0 = fully off
@@ -71,41 +90,67 @@ Singleton {
 
     // ---------- reading ----------
     function refresh(done) {
-        // One go: directory, writability, values. Shell builtins only (read).
-        reader.go(["sh", "-c",
-            'for d in /sys/class/leds/*::kbd_backlight; do [ -e "$d/brightness" ] || continue; ' +
-            'echo "dir|$d"; ' +
-            'for f in brightness max_brightness multi_intensity multi_max_intensity multi_index; do ' +
-            '  [ -r "$d/$f" ] && { read -r v < "$d/$f"; echo "$f|$v"; }; done; ' +
-            '[ -w "$d/brightness" ] && echo "w|brightness"; [ -w "$d/multi_intensity" ] && echo "w|multi_intensity"; ' +
-            'break; done; ' +
-            '[ -f /etc/udev/rules.d/90-ccenter.rules ] && echo "rule|etc"; [ -f /usr/lib/udev/rules.d/90-ccenter.rules ] && echo "rule|lib"; true'],
-            (code, out) => { root.parse(out); if (done) done() })
+        reader.go(["sh", Quickshell.shellPath("scripts/kbdinfo.sh")], (code, out) => { root.parse(out); if (done) done() })
     }
     function parse(out) {
-        const v = {}, w = {}
+        const leds = []                       // [{ name, driver, path, v: {file: value}, w: {file: true}, x: {file: true} }]
+        const byName = {}
+        const usb = []
+        let rule = ""
         for (const line of out.split("\n")) {
-            const i = line.indexOf("|")
-            if (i < 0) continue
-            const k = line.slice(0, i), val = line.slice(i + 1)
-            if (k === "w") w[val] = true
-            else v[k] = val
+            const p = line.split("|")
+            if (p[0] === "dmi" && p.length >= 6) dmi = { vendor: p[1], product: p[2], family: p[4], board: p[5] }
+            else if (p[0] === "kernel") kernel = p[1] || ""
+            else if (p[0] === "led" && p.length >= 4) { const l = { name: p[1], driver: p[2], path: p.slice(3).join("|"), v: {}, w: {}, x: {} }; leds.push(l); byName[p[1]] = l }
+            else if ((p[0] === "v" || p[0] === "w" || p[0] === "x") && byName[p[1]]) byName[p[1]][p[0]][p[2]] = p[0] === "v" ? p.slice(3).join("|") : true
+            else if (p[0] === "usb") usb.push({ vid: p[1], pid: p[2], name: p[3] || "" })
+            else if (p[0] === "rule") rule = rule || (p[1] === "etc" ? (p[2] === "legacy" ? "etc-legacy" : "etc") : "lib")
         }
         if (!ready) loadSaved()               // load saved effect settings on the first read (the settings file is ready by now)
-        ruleAt = /rule\|etc/.test(out) ? "etc" : /rule\|lib/.test(out) ? "lib" : ""
-        dir = v.dir || ""
-        rgb = !!v.multi_intensity && /red/.test(v.multi_index || "") && /green/.test(v.multi_index || "")
-        writable = !!w.brightness && (!rgb || !!w.multi_intensity)
-        maxBrightness = parseInt(v.max_brightness) || 255
-        brightness = parseInt(v.brightness) || 0
-        if (rgb) maxIntensity = (v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
-        // While an effect runs, the hardware colour is just the current frame; don't overwrite the chosen colour with it
-        if (rgb && !effectActive) {
-            const it = v.multi_intensity.trim().split(/\s+/).map(x => parseInt(x) || 0)
-            const order = (v.multi_index || "red green blue").trim().split(/\s+/)
-            const ch = n => { const k = order.indexOf(n); return k < 0 ? 0 : it[k] / maxIntensity[k] }
-            color = Qt.rgba(ch("red"), ch("green"), ch("blue"), 1)
-        }
+        ruleAt = rule.startsWith("etc") ? "etc" : rule
+        ruleLegacy = rule === "etc-legacy"
+
+        // Pick the backend
+        const isRgb = l => !!l.v.multi_intensity && /red/.test(l.v.multi_index || "") && /green/.test(l.v.multi_index || "")
+        const zoned = leds.filter(l => l.name.indexOf("::kbd_zoned_backlight-") >= 0)
+        const single = leds.find(l => /::kbd_backlight$/.test(l.name)) || leds.find(l => l.name.indexOf("::kbd_backlight") >= 0)
+        let use = [], kind = ""
+        if (zoned.length > 0 && zoned.every(isRgb)) { use = zoned; kind = "hp-zoned" }
+        else if (single && isRgb(single)) { use = [single]; kind = "led-rgb" }
+        else if (single && single.x.kbd_rgb_mode) { use = [single]; kind = "asus-tuf" }
+        else if (single) { use = [single]; kind = "led-mono" }
+        else if (zoned.length > 0) { use = zoned; kind = "led-mono" }
+        backend = kind
+        zones = use.map(l => l.path)
+        name = use.length > 1 ? use[0].name.replace(/-[^-]*$/, "") + " ×" + use.length : (use.length ? use[0].name : "")
+        driver = use.length ? use[0].driver : ""
+        const first = use[0]
+        writable = use.length > 0 && use.every(l => l.w.brightness
+                    && (kind === "led-rgb" || kind === "hp-zoned" ? !!l.w.multi_intensity : true)
+                    && (kind === "asus-tuf" ? !!l.w.kbd_rgb_mode : true))
+        maxBrightness = first ? (parseInt(first.v.max_brightness) || 255) : 255
+        brightness = first ? (parseInt(first.v.brightness) || 0) : 0
+        if (kind === "led-rgb" || kind === "hp-zoned") {
+            maxIntensity = (first.v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
+            // While an effect runs, the hardware colour is just the current frame; don't overwrite the chosen colour with it
+            if (!effectActive) {
+                const it = first.v.multi_intensity.trim().split(/\s+/).map(x => parseInt(x) || 0)
+                const order = (first.v.multi_index || "red green blue").trim().split(/\s+/)
+                const ch = n => { const k = order.indexOf(n); return k < 0 ? 0 : it[k] / maxIntensity[k] }
+                color = Qt.rgba(ch("red"), ch("green"), ch("blue"), 1)
+            }
+        } else maxIntensity = [255, 255, 255]
+
+        // Findings worth explaining (RGB the kernel doesn't expose)
+        const vendor = dmi.vendor.toLowerCase()
+        const n = []
+        if (vendor.indexOf("lenovo") >= 0 && usb.some(u => u.vid === "048d" && /^c9/i.test(u.pid))) n.push("legion-usb")
+        if (vendor.indexOf("asus") >= 0 && kind !== "asus-tuf" && usb.some(u => u.vid === "0b05" && /n-key/i.test(u.name))) n.push("rog-usb")
+        if (vendor === "hp" && kind === "") n.push("hp-none")
+        notes = n
+
+        // ASUS TUF: the colour can't be read back, so the saved colour is applied once at startup
+        if (!ready && kind === "asus-tuf" && writable && Settings.kbdOf().color !== "") queue("color", colorValue(color, 1))
         ready = true
     }
 
@@ -114,7 +159,17 @@ Singleton {
     function intensity(c, level) {
         return [c.r, c.g, c.b].map((x, i) => Math.round(Math.max(0, Math.min(1, x * level)) * (maxIntensity[i] ?? 255))).join(" ")
     }
-    // Changes show in the UI immediately; the file is written at most ~12 times/s (while dragging)
+    // The value written for a colour, per backend
+    function colorValue(c, level) {
+        if (backend === "asus-tuf") {
+            // cmd 0 = apply (1 would save to BIOS: never), mode 0 = static, speed 1 (ignored by static)
+            const v = [c.r, c.g, c.b].map(x => Math.round(Math.max(0, Math.min(1, x * level)) * 255))
+            return "0 0 " + v.join(" ") + " 1"
+        }
+        return intensity(c, level)
+    }
+    readonly property string colorFile: backend === "asus-tuf" ? "kbd_rgb_mode" : "multi_intensity"
+    // Changes show in the UI immediately; the files are written at most ~12 times/s (while dragging)
     property var pending: ({})
     function setBrightness(b) {
         if (!writable) { refresh(); return }  // without permission don't change the state; it may have been granted meanwhile, so check again
@@ -127,21 +182,21 @@ Singleton {
         c = Qt.lighter(c, 1)                  // may also be a "#rrggbb" string (terminal, presets): convert to a colour
         color = Qt.rgba(c.r, c.g, c.b, 1)
         Settings.setKbd({ color: hex(color) })
-        if (!effectActive) queue("multi_intensity", intensity(color, 1))   // with an effect running, the next frame applies it
+        if (!effectActive) queue("color", colorValue(color, 1))   // with an effect running, the next frame applies it
         // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it
         if (brightness === 0) setBrightness(maxBrightness)
     }
-    function queue(file, value) {
+    function queue(kind, value) {
         if (!available) return
         const p = Object.assign({}, pending)
-        p[file] = value
+        p[kind] = value
         pending = p
         if (!flush.running) flush.start()
     }
     function writeNext() {
         // Colour first, then brightness (so the light never shows the new colour at the old brightness)
-        for (const f of ["multi_intensity", "brightness"])
-            if (pending[f] !== undefined) send(f, pending[f])
+        if (pending.color !== undefined) sendColor(pending.color)
+        if (pending.brightness !== undefined) for (const z of zones) send(z + "/brightness", pending.brightness)
         pending = ({})
     }
     Timer { id: flush; interval: 80; onTriggered: root.writeNext() }
@@ -149,9 +204,11 @@ Singleton {
     // One persistent writer process (awk): starting a process per write would be costly during effects (25 frames/s).
     // awk reads its input buffered (bash "read" reads a pipe byte by byte, ~2x the CPU; Quickshell FileView ~3x).
     // Each write is two lines: file path, value. If a write fails, awk prints an error and exits.
-    function send(file, value) {
-        if (writer.running) writer.write(dir + "/" + file + "\n" + value + "\n")
+    // Paths only ever come from detection (the light's own folder), never from user input.
+    function send(path, value) {
+        if (writer.running) writer.write(path + "\n" + value + "\n")
     }
+    function sendColor(value) { for (const z of zones) send(z + "/" + colorFile, value) }
     function writeFailed(why) {
         error = I18n.t("Could not write to the keyboard light") + (why ? ": " + why : "")
         effect = "static"                     // permission lost: stop the effect (not saved to settings)
@@ -174,7 +231,7 @@ Singleton {
         if (e === "cycle" && source === "single") setSource("multi")   // a cycle needs more than one colour
         effect = e
         Settings.setKbd({ effect: e })
-        if (e === "static") queue("multi_intensity", intensity(color, 1))   // effect off: back to the chosen colour
+        if (e === "static") queue("color", colorValue(color, 1))   // effect off: back to the chosen colour
         else { t0 = Date.now(); lastFrame = "" }
     }
     function setSource(s) { source = s; Settings.setKbd({ source: s }); lastFrame = "" }
@@ -237,11 +294,12 @@ Singleton {
             const l = Math.pow((1 - Math.cos(2 * Math.PI * f)) / 2, 1.8)   // 0 -> 1 -> 0, a bit longer in the dark part (perceived brightness is not linear)
             v = frame(cycle[k % n], minLevel + (maxLevel - minLevel) * l)
         }
-        if (v !== lastFrame) { lastFrame = v; send("multi_intensity", v) }
+        if (v !== lastFrame) { lastFrame = v; sendColor(v) }
     }
     Timer {
-        // ~80 frames per breath is smooth enough: 25 frames/s when fast, fewer when slow (less CPU)
-        interval: Math.max(40, Math.min(100, root.period * 1000 / 80))
+        // ~80 frames per breath is smooth enough: 25 frames/s when fast, fewer when slow (less CPU).
+        // Zoned keyboards need one write per zone per frame, so they get half the frame rate.
+        interval: Math.max(40, Math.min(100, root.period * 1000 / 80)) * (root.zones.length > 1 ? 2 : 1)
         repeat: true
         running: root.effectActive && writer.running
         onTriggered: root.tick()
@@ -257,36 +315,53 @@ Singleton {
         flushSaves()
         if (!effectActive) { cb(); return }
         effect = "static"                                   // not saved: the effect resumes on the next start
-        oneShot.go(["sh", "-c", 'printf "%s\\n" "$2" > "$1"', "sh", dir + "/multi_intensity", intensity(color, 1)], () => cb())
+        oneShot.go(["sh", "-c", 'v=$1; shift; for f; do printf "%s\\n" "$v" > "$f"; done', "sh", colorValue(color, 1)]
+                   .concat(zones.map(z => z + "/" + colorFile)), () => cb())
     }
 
     // ---------- write permission (only when the user asks; via the system password dialog) ----------
-    // The rule file ships with the app (dist/90-ccenter.rules); it goes to /etc/udev/rules.d and udev applies it right away.
+    // The rule template ships with the app (dist/90-ccenter.rules). @UID@ is replaced with the user who authenticated
+    // (PKEXEC_UID, set by pkexec itself), so only that user gets write access. The rendered rule is written to a
+    // root-owned file first and checked line by line (scripts/kbd-rule-check.sh: only the expected chown lines);
+    // nothing is changed if the check fails. Then the old world-writable permissions (0666, earlier versions) are
+    // reset, the rule goes to /etc/udev/rules.d and udev applies it right away.
     readonly property string ruleFile: Quickshell.shellPath("dist/90-ccenter.rules")
+    readonly property string ruleCheck: Quickshell.shellPath("scripts/kbd-rule-check.sh")
+    readonly property string resetPerms:
+        'for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do ' +
+        '[ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; ' +
+        '[ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; '
     function grantPermission() {
+        // While the files change hands (old permissions reset, then the new owner set) a running effect must not write,
+        // or it hits "Permission denied" in between. Pause it; permDone() resumes it once the new state has been read.
+        if (effectActive) paused = true
         permBusy = true
         error = ""
         perm.go(["pkexec", "sh", "-c",
-                 'install -Dm644 "$1" /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules && ' +
-                 'udevadm trigger --action=change --subsystem-match=leds && udevadm settle', "sh", ruleFile],
+                 'uid=$PKEXEC_UID; case "$uid" in ""|*[!0-9]*) echo "unknown user" >&2; exit 1 ;; esac; ' +
+                 'new=/etc/udev/rules.d/90-ccenter.rules.new; ' +
+                 'sed "s/@UID@/$uid/g" "$1" > "$new" && sh "$2" "$new" "$uid" || { rm -f "$new"; exit 1; }; ' +
+                 resetPerms +
+                 'chmod 644 "$new" && mv "$new" /etc/udev/rules.d/90-ccenter.rules && ' +
+                 'udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds && udevadm settle',
+                 "sh", ruleFile, ruleCheck],
                 (code, out, err) => root.permDone(code, out, err))
     }
     function revokePermission() {
         // Without permission the effect can't write: switch the keyboard to the chosen static colour and pause the effect.
         // The saved choice is kept, so the effect resumes once permission is granted again.
-        if (effectActive) { paused = true; send("multi_intensity", intensity(color, 1)) }
+        if (effectActive) { paused = true; sendColor(colorValue(color, 1)) }
         permBusy = true
         error = ""
         perm.go(["pkexec", "sh", "-c",
-                 'rm -f /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' +
-                 'for f in /sys/class/leds/*::kbd_backlight/brightness /sys/class/leds/*::kbd_backlight/multi_intensity; do ' +
-                 '[ -e "$f" ] && chmod 0644 "$f"; done; true'],
+                 'rm -f /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' + resetPerms + 'true'],
                 (code, out, err) => root.permDone(code, out, err))
     }
     function permDone(code, out, err) {
         permBusy = false
         // 126/127: password dialog dismissed / not authorised
         if (code !== 0) error = code === 126 || code === 127 ? I18n.t("Cancelled.") : I18n.t("Failed: %1").arg((err || out).trim().split("\n")[0])
+        else effect = Settings.kbdOf().effect  // a write that failed earlier may have stopped the effect: bring back the saved one
         // Unpause only after the new permission state has been read: if permission is gone, writable=false stops the effect;
         // if it was cancelled, the effect continues (unpausing earlier would make the effect write without permission and stop itself)
         refresh(() => { root.paused = false })
@@ -298,6 +373,38 @@ Singleton {
         const h = x => ("0" + Math.round(x * 255).toString(16)).slice(-2)
         return ("#" + h(c.r) + h(c.g) + h(c.b)).toUpperCase()
     }
+    function kindText() {
+        return backend === "hp-zoned" ? I18n.t("RGB, %1 zones (same color on all)").arg(zones.length)
+             : backend === "asus-tuf" ? I18n.t("RGB, single zone, ASUS TUF")
+             : backend === "led-rgb" ? I18n.t("RGB, single zone")
+             : I18n.t("single color, %1 brightness levels").arg(maxBrightness)
+    }
+    // Detection report (ccenter kbd info): what was found, step by step, for bug reports
+    function infoText() {
+        const lines = [
+            I18n.t("Laptop: %1").arg([dmi.vendor, dmi.product].filter(x => x).join(" · ") || "?") + (dmi.board ? " (" + dmi.board + ")" : ""),
+            I18n.t("Kernel: %1").arg(kernel || "?"),
+            I18n.t("Driver: %1").arg(driver || "-"),
+            I18n.t("Light: %1").arg(available ? name + " (" + kindText() + ")" : I18n.t("none found")),
+            I18n.t("Permission: %1").arg(!available ? "-" : writable ? I18n.t("yes") + (ruleLegacy ? " (" + I18n.t("old, less strict rule") + ")" : "") : I18n.t("no")),
+            I18n.t("Support: %1").arg(supportText())
+        ]
+        for (const n of notes) lines.push("- " + noteText(n))
+        return lines.join("\n")
+    }
+    function supportText() {
+        if (!available) return I18n.t("not supported")
+        if (tested) return I18n.t("full (tested)")
+        if (effectsAllowed) return I18n.t("color, brightness and effects (not tested on this keyboard type)")
+        if (rgb) return I18n.t("color and brightness (not tested on this model)")
+        return I18n.t("brightness only")
+    }
+    function noteText(n) {
+        return n === "legion-usb" ? I18n.t("This Lenovo has a USB RGB keyboard controller (ITE). Its colors are not exposed by the kernel; tools like L5P-Keyboard-RGB or OpenRGB control it.")
+             : n === "rog-usb" ? I18n.t("This ASUS has an Aura (N-KEY) USB keyboard. Its colors are controlled by asusctl, not through the kernel light.")
+             : n === "hp-none" ? I18n.t("No keyboard light from the hp-wmi driver. HP color support needs a recent kernel (7.2 or newer); per-key RGB keyboards are not supported by the kernel.")
+             : n
+    }
     function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or install.sh)") }
     function statusText() {
         if (!available) return I18n.t("No keyboard light found (no /sys/class/leds/*::kbd_backlight)")
@@ -306,7 +413,7 @@ Singleton {
         const fx = effect === "breathing"
             ? I18n.t("breathing (%1, %2 s, %3%–%4%)").arg(src[source]).arg(I18n.num(period, 1)).arg(Math.round(minLevel * 100)).arg(Math.round(maxLevel * 100))
             : effect === "cycle" ? I18n.t("color cycle (%1, %2 s per color)").arg(src[source]).arg(I18n.num(period, 1)) : I18n.t("static")
-        return I18n.t("Keyboard light: %1").arg(name) + " (" + (rgb ? I18n.t("RGB, single zone") : I18n.t("single color")) + ")"
+        return I18n.t("Keyboard light: %1").arg(name) + " (" + kindText() + ")"
             + "\n" + I18n.t("Color: %1").arg(rgb ? hex(color) : "-")
             + "\n" + I18n.t("Brightness: %1%").arg(Math.round(brightness * 100 / maxBrightness))
             + "\n" + I18n.t("Effect: %1").arg(fx)

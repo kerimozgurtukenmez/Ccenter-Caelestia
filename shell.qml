@@ -135,6 +135,8 @@ ShellRoot {
         }
         // Keyboard light: colour "#rrggbb", brightness in percent (0-100)
         function kbd(): string { return Keyboard.statusText() }
+        // Detection report (laptop, driver, light, permission, support level): handy for bug reports
+        function kbdInfo(): string { return Keyboard.infoText() }
         function kbdColor(hex: string): string {
             if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
             if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return I18n.t("The color must look like #rrggbb (e.g. #ff0000)")
@@ -143,7 +145,7 @@ ShellRoot {
         }
         function kbdEffect(name: string): string {
             if (["static", "breathing", "cycle"].indexOf(name) < 0) return I18n.t("Effect: %1").arg("static | breathing | cycle")
-            if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
+            if (!Keyboard.effectsAllowed) return I18n.t("Effects are not available for this keyboard")
             Keyboard.setEffect(name)
             return Keyboard.writable ? I18n.t("Effect: %1").arg(name) : Keyboard.noPermissionText()
         }
