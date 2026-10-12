@@ -3,7 +3,7 @@
 A small control center for laptops: **fan control** and **keyboard lighting**, made with [Quickshell](https://quickshell.org) to fit right into [Caelestia dots](https://github.com/caelestia-dots).
 
 > [!NOTE]
-> I used AI assistance while building this project. All of the code was reviewed and tested by a human (me) on my own laptop before it was published.
+> I used AI assistance while building this project. I reviewed parts of the code myself and tested every feature on my own laptop before publishing it.
 
 > [!WARNING]
 > **This is an early project, use it at your own risk.**
