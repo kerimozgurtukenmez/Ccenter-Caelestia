@@ -109,7 +109,7 @@ Singleton {
         // stdout + stderr together; some versions print the list to stderr or in a different format
         enqueue("cfg:list", ["sh", "-c", "nbfc config -l 2>&1"], (code, out) => {
             const ls = root.lines(out).filter(l => !/^(usage|error|warning)/i.test(l))
-            console.log("[ccenter] nbfc config -l (exit " + code + "): " + ls.length + " lines; first: " + (ls[0] || "-"))
+            console.log("[ccenter] nbfc config -l (exit " + code + "): " + ls.length + " configs available; selected: " + (root.configId || "-"))
             root.cfgFromCli = code === 0 ? ls : []
             root.cfgNoteCli = code === 0 ? (ls.length === 0 ? I18n.t("nbfc config -l returned nothing") : "")
                                          : I18n.t("nbfc config -l failed (code %1): %2").arg(code).arg(root.firstLine(out))

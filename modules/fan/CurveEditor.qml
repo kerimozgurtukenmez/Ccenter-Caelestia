@@ -14,7 +14,8 @@ ColumnLayout {
     readonly property int tMin: 30
     readonly property int tMax: 100
     readonly property int selIndex: Math.max(0, Math.min(selected, points.length - 1))
-    readonly property var sel: points.length > 0 ? points[selIndex] : ({ t: 0, s: 0 })
+    // Clamped here too: when the points change (e.g. a profile with fewer points), this may update before selIndex
+    readonly property var sel: points[Math.max(0, Math.min(selected, points.length - 1))] ?? ({ t: 0, s: 0 })
     signal edited(var pts)
     signal smoothPicked(bool v)
 

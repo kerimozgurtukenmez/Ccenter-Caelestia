@@ -84,8 +84,10 @@ Card {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (chip.deleting) {
-                            Settings.removeProfile(card.cfgId, chip.modelData.name)
+                            // Reset first: removing the profile destroys this chip, and nothing after that may run here
+                            const name = chip.modelData.name
                             card.confirmDelete = ""
+                            Settings.removeProfile(card.cfgId, name)
                         } else {
                             card.confirmDelete = chip.modelData.name
                         }
@@ -98,7 +100,8 @@ Card {
     // Max fan: all fans at 100%; when the time is up each fan returns to its own setting
     property double now: Date.now()
     Timer { running: Nbfc.boostUntil > 0; interval: 1000; repeat: true; triggeredOnStart: true; onTriggered: card.now = Date.now() }
-    function left() {
+    // Remaining max-fan time "m:ss". (Not called left(): every Item already has a "left" anchor property.)
+    function remaining() {
         const s = Math.max(0, Math.round((Nbfc.boostUntil - now) / 1000))
         return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
     }
@@ -112,7 +115,7 @@ Card {
         }
         StyledText {
             Layout.fillWidth: true
-            text: Nbfc.boosting ? I18n.t("Max fan on") + (Nbfc.boostUntil > 0 ? " · " + I18n.t("%1 left").arg(card.left()) : "") : I18n.t("Max fan")
+            text: Nbfc.boosting ? I18n.t("Max fan on") + (Nbfc.boostUntil > 0 ? " · " + I18n.t("%1 left").arg(card.remaining()) : "") : I18n.t("Max fan")
             color: Nbfc.boosting ? Colours.error : Colours.fg
             font { pixelSize: 13; bold: Nbfc.boosting }
         }
